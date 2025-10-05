@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cookie Syncer - 欢迎</title>
+    <script type="module" src="./navigation.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: system-ui, -apple-system, sans-serif;
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            max-width: 600px;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+        p {
+            font-size: 1.2em;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        .links {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .link {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            color: white;
+            transition: background 0.3s;
+        }
+        .link:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Cookie Syncer</h1>
+        <p>跨站点、跨设备的 Cookie/TOKEN 自动续期与同步助手</p>
+        <p>让登录状态永远在线</p>
+        
+        <div class="links">
+            <a href="#" data-route="popup" class="link">🚀 打开弹窗</a>
+            <a href="#" data-route="options" class="link">⚙️ 设置页面</a>
+        </div>
+        
+        <p style="margin-top: 40px; font-size: 0.9em; opacity: 0.8;">
+            您也可以通过浏览器工具栏的插件图标访问弹窗，或通过右键菜单访问设置页面
+        </p>
+    </div>
+</body>
+</html>

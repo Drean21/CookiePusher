@@ -1,0 +1,31 @@
+{
+    "manifest_version": 3,
+    "name": "CookieSyncer – 通用 Cookie/TOKEN 同步助手",
+    "version": "1.0.0",
+    "description": "跨站点、跨设备的 Cookie/TOKEN 自动续期与同步助手，让登录状态永远在线",
+    "permissions": [
+        "cookies",
+        "storage",
+        "alarms",
+        "tabs",
+        "scripting",
+        "activeTab",
+        "debugger",
+        "downloads"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "background": {
+        "service_worker": "background/index.js",
+        "type": "module"
+    },
+    "action": {
+        "default_popup": "popup/index.html",
+        "default_title": "CookieSyncer"
+    },
+    "content_security_policy": {
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    },
+    "minimum_chrome_version": "88"
+}
