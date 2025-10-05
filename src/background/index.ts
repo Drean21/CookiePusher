@@ -1,129 +1,147 @@
 /**
- * CookieSyncer - 最终架构后台服务 V4 (带智能分组)
+ * CookieSyncer - "Automatic & Non-Intrusive" Backend (V9 - The Final, Final One)
  */
 
-// 扩展安装事件
-chrome.runtime.onInstalled.addListener((details) => {
-    console.log('[CookieSyncer] 扩展已安装/更新:', details.reason);
-});
+type Cookie = chrome.cookies.Cookie;
 
-// Chrome扩展消息监听器
+// Main message listener
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    const { action } = message;
-    if (action === 'getCurrentTabCookies') {
-        handleGetCurrentTabCookies()
-            .then(sendResponse)
+    const { action, payload } = message;
+
+    if (action === 'getCookiesForCurrentTab') {
+        handleGetCookiesForCurrentTab()
+            .then(response => sendResponse({ success: true, ...response }))
             .catch(error => {
-                console.error('[CookieSyncer] 获取Cookie时发生顶层错误:', error);
+                console.error('[CookieSyncer] V9 Analysis Failed:', error);
                 sendResponse({ success: false, error: error.message });
             });
-        return true; // 异步响应
+        return true; // Indicates async response
     }
+
+    if (action === 'syncSingleCookie' || action === 'syncAllCookiesForDomain') {
+        handleSyncCookies(payload)
+            .then(response => sendResponse({ success: true, ...response }))
+            .catch(error => {
+                console.error('[CookieSyncer] Sync failed:', error);
+                sendResponse({ success: false, error: error.message });
+            });
+        return true;
+    }
+
     return false;
 });
 
 /**
- * 使用 Debugger API 监听网络请求，收集所有相关URL，然后获取这些URL的Cookie，并进行智能分组。
+ * The definitive, non-intrusive, and correct way to get all relevant cookies.
+ * This function is now called automatically by the popup on open.
  */
-async function handleGetCurrentTabCookies() {
+async function handleGetCookiesForCurrentTab() {
     const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-    if (!currentTab || !currentTab.id) {
-        throw new Error('没有找到活动的标签页。');
+    if (!currentTab?.id || !currentTab.url) {
+        throw new Error('没有找到活动的标签页或标签页没有URL。');
     }
     
-    const tabUrl = currentTab.url;
-    if (tabUrl && (tabUrl.startsWith('chrome://') || tabUrl.startsWith('about:'))) {
-        return { success: true, groupedCookies: {}, domain: '特殊页面' };
+    if (currentTab.url.startsWith('chrome://') || currentTab.url.startsWith('about:')) {
+        return { groupedCookies: {}, domain: '特殊页面' };
     }
 
-    const debuggee = { tabId: currentTab.id };
-    const protocolVersion = "1.3";
-    const requestedUrls = new Set<string>();
-    if (tabUrl) {
-        requestedUrls.add(tabUrl); // 初始加入当前页URL
-    }
+    // --- The Correct Way: Get all frame domains directly via scripting ---
+    const injectionResults = await chrome.scripting.executeScript({
+        target: { tabId: currentTab.id, allFrames: true },
+        func: () => document.domain,
+    }).catch(error => {
+        console.warn(`[CookieSyncer] Scripting injection failed, likely due to a protected page. Falling back to main domain. Error: ${error.message}`);
+        // Fallback to only the main domain if injection fails
+        return [{ result: new URL(currentTab.url!).hostname }];
+    });
 
-    const onDebuggerEvent = (source: chrome.debugger.Debuggee, method: string, params: any) => {
-        if (source.tabId !== currentTab.id) return;
-        if (method === "Network.requestWillBeSent") {
-            requestedUrls.add(params.request.url);
-        }
-    };
-    
-    try {
-        await new Promise<void>((resolve, reject) => {
-            chrome.debugger.attach(debuggee, protocolVersion, () => {
-                if (chrome.runtime.lastError) {
-                    reject(new Error(chrome.runtime.lastError.message || '无法附加调试器。'));
-                } else {
-                    chrome.debugger.sendCommand(debuggee, "Network.enable", {}, () => {
-                        if (chrome.runtime.lastError) reject(new Error('开启网络监听失败。'));
-                        else resolve();
-                    });
-                }
-            });
-        });
-        
-        chrome.debugger.onEvent.addListener(onDebuggerEvent);
-        await chrome.tabs.reload(currentTab.id);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        chrome.debugger.onEvent.removeListener(onDebuggerEvent);
-        
-        const cookiePromises = Array.from(requestedUrls).map(url => 
-            chrome.cookies.getAll({ url }).catch(() => [])
-        );
-        const settledCookies = await Promise.all(cookiePromises);
-        const allCookies = settledCookies.flat();
-        
-        const uniqueCookies = Array.from(new Map(allCookies.map(cookie => [cookie.name + cookie.domain + cookie.path, cookie])).values());
-        
-        // --- 智能分组逻辑 ---
-        const groupedCookies = uniqueCookies.reduce((acc, cookie) => {
-            const groupKey = getRegistrableDomain(cookie.domain);
-            if (!acc[groupKey]) {
-                acc[groupKey] = [];
+    const domains = new Set<string>();
+    if (injectionResults) {
+        injectionResults.forEach(item => {
+            if (item.result) {
+                domains.add(item.result);
             }
-            acc[groupKey].push(cookie);
-            return acc;
-        }, {} as { [key: string]: chrome.cookies.Cookie[] });
-
-        return {
-            success: true,
-            groupedCookies: groupedCookies,
-            domain: new URL(tabUrl!).hostname
-        };
-
-    } finally {
-        await new Promise<void>(resolve => {
-            chrome.debugger.onEvent.removeListener(onDebuggerEvent);
-            chrome.debugger.detach(debuggee, () => resolve());
         });
     }
+    domains.add(new URL(currentTab.url).hostname);
+
+    // --- The Correct Logic: Global Scan + Precise Filtering ---
+    const allBrowserCookies = await chrome.cookies.getAll({});
+    const relevantCookies = filterCookiesByDomains(allBrowserCookies, domains);
+    const uniqueCookies = Array.from(new Map(relevantCookies.map(c => [c.name + c.domain + c.path, c])).values());
+    
+    const groupedCookies = uniqueCookies.reduce((acc, cookie) => {
+        const groupKey = getRegistrableDomain(cookie.domain);
+        if (!acc[groupKey]) acc[groupKey] = [];
+        acc[groupKey].push(cookie);
+        return acc;
+    }, {} as { [key: string]: Cookie[] });
+
+    return {
+        groupedCookies: groupedCookies,
+        domain: new URL(currentTab.url).hostname,
+    };
 }
 
 /**
- * 获取一个域名的可注册域 (eTLD+1)
- * 例如, 'www.bilibili.com' -> 'bilibili.com'
- * 例如, 'a.b.github.io' -> 'b.github.io'
- * 这是一个简化的实现，对于复杂的eTLD列表可能不完美，但能处理绝大多数情况。
+ * Filters a list of all browser cookies down to only those that are "visible"
+ * to a given set of domains.
  */
+function filterCookiesByDomains(allCookies: Cookie[], domains: Set<string>): Cookie[] {
+    const relevantCookies: Cookie[] = [];
+    const pageDomains = Array.from(domains).map(d => d.toLowerCase());
+
+    for (const cookie of allCookies) {
+        const cookieDomain = cookie.domain.startsWith('.') ? cookie.domain.substring(1).toLowerCase() : cookie.domain.toLowerCase();
+        
+        const isVisible = pageDomains.some(pageDomain =>
+            pageDomain === cookieDomain || pageDomain.endsWith(`.${cookieDomain}`)
+        );
+
+        if (isVisible) {
+            relevantCookies.push(cookie);
+        }
+    }
+    return relevantCookies;
+}
+
 function getRegistrableDomain(domain: string): string {
-    if (domain.startsWith('.')) {
-        domain = domain.substring(1);
-    }
+    if (domain.startsWith('.')) domain = domain.substring(1);
     const parts = domain.split('.');
-    if (parts.length <= 2) {
-        return domain;
-    }
-    // 简单的处理 com.cn, org.cn 等情况
-    const twoLevelTlds = new Set(['com.cn', 'org.cn', 'net.cn', 'gov.cn']);
+    if (parts.length <= 2) return domain;
+    const twoLevelTlds = new Set(['com.cn', 'org.cn', 'net.cn', 'gov.cn', 'co.uk', 'co.jp']);
     const lastTwo = parts.slice(-2).join('.');
-    if (twoLevelTlds.has(lastTwo) && parts.length > 3) {
+    if (twoLevelTlds.has(lastTwo) && parts.length > 2) {
         return parts.slice(-3).join('.');
     }
     return lastTwo;
 }
 
-console.log('[CookieSyncer] 最终架构V4后台服务已加载 (带智能分组)。');
+async function handleSyncCookies(payload: { cookie?: Cookie, cookies?: Cookie[] }) {
+    const SYNC_LIST_STORAGE_KEY = 'syncList';
+    if (!payload || (!payload.cookie && !payload.cookies)) {
+        throw new Error('无效的同步请求负载。');
+    }
+    const newCookies = payload.cookies || (payload.cookie ? [payload.cookie] : []);
+    if (newCookies.length === 0) return { message: "没有需要同步的Cookie。" };
+    
+    const result = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY);
+    const currentSyncList: Cookie[] = result[SYNC_LIST_STORAGE_KEY] || [];
+    const syncMap = new Map(currentSyncList.map(c => [c.name + c.domain + c.path, c]));
+
+    let addedCount = 0;
+    newCookies.forEach(c => {
+        const key = c.name + c.domain + c.path;
+        if (!syncMap.has(key)) addedCount++;
+        syncMap.set(key, c);
+    });
+
+    const updatedSyncList = Array.from(syncMap.values());
+    await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedSyncList });
+
+    console.log(`[CookieSyncer] 同步列表已更新。新增 ${addedCount} 个, 总计 ${updatedSyncList.length} 个。`);
+    return { added: addedCount, total: updatedSyncList.length };
+}
+
+console.log('[CookieSyncer] Automatic & Non-Intrusive Backend (V9) loaded.');
