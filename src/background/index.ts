@@ -28,6 +28,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
+    if (action === 'getCookiesForDomain') {
+        handleGetCookiesForDomain(payload)
+            .then(response => sendResponse({ success: true, ...response }))
+            .catch(error => {
+                console.error('[CookieSyncer] Get for domain failed:', error);
+                sendResponse({ success: false, error: error.message });
+            });
+        return true;
+    }
+
+    if (action === 'removeCookieFromSyncList') {
+        handleRemoveCookieFromSync(payload)
+            .then(response => sendResponse({ success: true, ...response }))
+            .catch(error => {
+                console.error('[CookieSyncer] Remove from sync failed:', error);
+                sendResponse({ success: false, error: error.message });
+            });
+        return true;
+    }
+
+    if (action === 'removeDomainFromSyncList') {
+        handleRemoveDomainFromSync(payload)
+            .then(response => sendResponse({ success: true, ...response }))
+            .catch(error => {
+                console.error('[CookieSyncer] Remove domain from sync failed:', error);
+                sendResponse({ success: false, error: error.message });
+            });
+        return true;
+    }
+
     return false;
 });
 
@@ -145,3 +175,59 @@ async function handleSyncCookies(payload: { cookie?: Cookie, cookies?: Cookie[] 
 }
 
 console.log('[CookieSyncer] Automatic & Non-Intrusive Backend (V9) loaded.');
+
+async function handleGetCookiesForDomain(payload: { domain: string }) {
+    if (!payload?.domain) {
+        throw new Error('无效的域名。');
+    }
+    const cookies = await chrome.cookies.getAll({ domain: payload.domain });
+    return { cookies };
+}
+
+async function handleRemoveCookieFromSync(payload: { cookie: Cookie }) {
+    const SYNC_LIST_STORAGE_KEY = 'syncList';
+    if (!payload?.cookie) {
+        throw new Error('无效的Cookie以进行移除。');
+    }
+    const cookieToRemove = payload.cookie;
+    const result = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY);
+    const currentSyncList: Cookie[] = result[SYNC_LIST_STORAGE_KEY] || [];
+
+    const keyToRemove = cookieToRemove.name + cookieToRemove.domain + cookieToRemove.path;
+
+    const updatedSyncList = currentSyncList.filter(c => {
+        const key = c.name + c.domain + c.path;
+        return key !== keyToRemove;
+    });
+
+    await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedSyncList });
+    
+    console.log(`[CookieSyncer] 从同步列表中移除: ${cookieToRemove.name}. 总计: ${updatedSyncList.length} 个.`);
+    return {
+        removed: true,
+        total: updatedSyncList.length,
+    };
+}
+
+async function handleRemoveDomainFromSync(payload: { domain: string }) {
+    const SYNC_LIST_STORAGE_KEY = 'syncList';
+    if (!payload?.domain) {
+        throw new Error('无效的域名以进行移除。');
+    }
+    const domainToRemove = payload.domain;
+    const result = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY);
+    const currentSyncList: Cookie[] = result[SYNC_LIST_STORAGE_KEY] || [];
+
+    const updatedSyncList = currentSyncList.filter(c => {
+        const regDomain = getRegistrableDomain(c.domain);
+        return regDomain !== domainToRemove;
+    });
+
+    await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedSyncList });
+    
+    console.log(`[CookieSyncer] 从同步列表中移除域名: ${domainToRemove}.`);
+    return {
+        removed: true,
+        total: updatedSyncList.length,
+    };
+}

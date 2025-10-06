@@ -6,6 +6,9 @@
     <main class="popup-content">
       <component :is="activeComponent" />
     </main>
+    <div v-if="notification.visible" class="notification" :class="notification.type">
+      {{ notification.message }}
+    </div>
     <footer class="popup-footer">
       <nav class="tab-nav">
         <a @click="activeView = 'current'" :class="{ active: activeView === 'current' }"
@@ -23,14 +26,36 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, provide } from "vue";
 import CurrentPageView from "./views/CurrentPageView.vue";
 import ManagedDomainsView from "./views/ManagedDomainsView.vue";
 import SettingsView from "./views/SettingsView.vue";
 
 type View = "current" | "managed" | "settings";
+type NotificationType = 'success' | 'error';
 
 const activeView = ref<View>("current");
+
+const notification = ref({
+  visible: false,
+  message: '',
+  type: 'success' as NotificationType
+});
+
+let notificationTimer: any;
+
+const showNotification = (message: string, type: NotificationType = 'success', duration: number = 3000) => {
+  notification.value = { visible: true, message, type };
+  if (notificationTimer) {
+    clearTimeout(notificationTimer);
+  }
+  notificationTimer = setTimeout(() => {
+    notification.value.visible = false;
+  }, duration);
+};
+
+provide('showNotification', showNotification);
+
 
 const activeComponent = computed(() => {
   switch (activeView.value) {
@@ -111,5 +136,27 @@ body {
   color: #667eea;
   border-bottom: 3px solid #667eea;
   background-color: #f0f2f5;
+}
+</style>
+<style scoped>
+.notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 6px;
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transition: all 0.3s ease-in-out;
+}
+.notification.success {
+  background-color: #4caf50;
+}
+.notification.error {
+  background-color: #f44336;
 }
 </style>

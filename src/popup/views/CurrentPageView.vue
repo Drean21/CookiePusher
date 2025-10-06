@@ -183,9 +183,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, inject } from "vue";
 import type { Cookie } from "../../../types/extension.d";
 import { sendMessage } from "../../utils/message";
+
+type ShowNotification = (message: string, type?: 'success' | 'error', duration?: number) => void;
+const showNotification = inject<ShowNotification>('showNotification', () => {});
 
 interface GroupedCookies {
   [domain: string]: Cookie[];
@@ -245,13 +248,27 @@ async function copyCookie(cookie: Cookie, format: "value" | "name-value" | "json
 }
 
 async function syncCookie(cookie: Cookie) {
-  await sendMessage("syncSingleCookie", { cookie });
+  try {
+    const response = await sendMessage("syncSingleCookie", { cookie });
+    if(response.success){
+        showNotification(`已添加 ${cookie.name}`, 'success');
+    }
+  } catch (e: any) {
+    showNotification(`添加失败: ${e.message}`, 'error');
+  }
 }
 
 async function syncAllCookies(domain: string) {
   const cookiesToSync = groupedCookies.value[domain];
   if (cookiesToSync?.length > 0) {
-    await sendMessage("syncAllCookiesForDomain", { cookies: cookiesToSync });
+    try {
+        const response = await sendMessage("syncAllCookiesForDomain", { cookies: cookiesToSync });
+        if(response.success){
+            showNotification(`已添加 ${domain} 下的 ${cookiesToSync.length} 个Cookie`, 'success');
+        }
+    } catch (e: any) {
+        showNotification(`添加失败: ${e.message}`, 'error');
+    }
   }
 }
 
