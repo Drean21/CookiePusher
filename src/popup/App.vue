@@ -32,7 +32,7 @@ import ManagedDomainsView from "./views/ManagedDomainsView.vue";
 import SettingsView from "./views/SettingsView.vue";
 
 type View = "current" | "managed" | "settings";
-type NotificationType = 'success' | 'error';
+type NotificationType = 'success' | 'error' | 'info';
 
 const activeView = ref<View>("current");
 
@@ -158,5 +158,8 @@ body {
 }
 .notification.error {
   background-color: #f44336;
+}
+.notification.info {
+  background-color: #2196F3;
 }
 </style>

@@ -23,11 +23,20 @@ export default defineConfig(({ mode }) => ({
       input: {
         popup: resolve(__dirname, 'src/popup/index.html'),
         background: resolve(__dirname, 'src/background/index.ts'),
+        offscreen: resolve(__dirname, 'src/offscreen/index.html'),
       },
       output: {
-        entryFileNames: '[name]/index.js',
+        entryFileNames: (chunkInfo) => {
+          return chunkInfo.name === 'offscreen' ? 'offscreen/index.js' : '[name]/index.js';
+        },
         chunkFileNames: 'chunks/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash].[ext]',
+        assetFileNames: (assetInfo) => {
+          // offscreen.html 直接输出到根目录
+          if (assetInfo.name === 'index.html' && assetInfo.source.includes('<title>CookieSyncer Offscreen</title>')) {
+            return 'offscreen/index.html';
+          }
+          return 'assets/[name]-[hash].[ext]';
+        },
       },
     },
   },

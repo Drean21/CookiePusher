@@ -1,5 +1,5 @@
 /**
- * CookieSyncer - "Automatic & Non-Intrusive" Backend (V11 - With Logging)
+ * CookieSyncer - "Automatic & Non-Intrusive" Backend (V13 - Final Keep-Alive)
  */
 
 import CryptoJS from 'crypto-js';
@@ -112,12 +112,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({ success: true });
             });
             break;
-        case 'keepAliveDone':
-            addLog('静默保活任务完成。', 'info');
-            chrome.offscreen.closeDocument();
+        case 'addLog':
+            if (payload) addLog(payload.message, payload.type);
+            break;
+        case 'keepAliveTaskFinished':
+            isAsync = true;
+            handleKeepAlivePostTasks()
+                .then(() => sendResponse({ success: true }))
+                .catch(error => {
+                    addLog(`[保活后处理失败] ${error.message}`, 'error');
+                    sendResponse({ success: false, error: error.message });
+                });
             break;
         default:
-            // Explicitly do nothing for unknown actions to avoid errors.
             break;
     }
     
@@ -145,7 +152,7 @@ async function handleGetCookiesForCurrentTab() {
 
     const allBrowserCookies = await chrome.cookies.getAll({});
     const relevantCookies = filterCookiesByDomains(allBrowserCookies, domains);
-    const uniqueCookies = Array.from(new Map(relevantCookies.map(c => [c.name + c.domain + c.path, c])).values());
+    const uniqueCookies = Array.from(new Map(relevantCookies.map(c => [getCookieKey(c), c])).values());
     
     const groupedCookies = uniqueCookies.reduce((acc, cookie) => {
         const groupKey = getRegistrableDomain(cookie.domain);
@@ -173,9 +180,11 @@ function filterCookiesByDomains(allCookies: Cookie[], domains: Set<string>): Coo
 }
 
 function isProtectedUrl(url: string): boolean {
-    const protectedSchemes = ['chrome://', 'about:', 'edge://'];
+    const protectedSchemes = ['chrome://', 'about:', 'edge://', 'moz-extension://'];
     return protectedSchemes.some(scheme => url.startsWith(scheme));
 }
+
+const getCookieKey = (cookie: Cookie): string => `${cookie.name}|${cookie.domain}|${cookie.path}`;
 
 function getRegistrableDomain(domain: string): string {
     if (domain.startsWith('.')) domain = domain.substring(1);
@@ -196,11 +205,11 @@ async function handleSyncCookies(payload: { cookie?: Cookie, cookies?: Cookie[] 
     
     const result = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY);
     const currentSyncList: Cookie[] = result[SYNC_LIST_STORAGE_KEY] || [];
-    const syncMap = new Map(currentSyncList.map(c => [c.name + c.domain + c.path, c]));
+    const syncMap = new Map(currentSyncList.map(c => [getCookieKey(c), c]));
 
     let addedCount = 0;
     newCookies.forEach(c => {
-        const key = c.name + c.domain + c.path;
+        const key = getCookieKey(c);
         if (!syncMap.has(key)) addedCount++;
         syncMap.set(key, c);
     });
@@ -221,8 +230,8 @@ async function handleRemoveCookieFromSync(payload: { cookie: Cookie }) {
     if (!payload?.cookie) throw new Error('无效的Cookie以进行移除。');
     const { cookie: cookieToRemove } = payload;
     const { [SYNC_LIST_STORAGE_KEY]: currentSyncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
-    const keyToRemove = cookieToRemove.name + cookieToRemove.domain + cookieToRemove.path;
-    const updatedSyncList = currentSyncList.filter(c => (c.name + c.domain + c.path) !== keyToRemove);
+    const keyToRemove = getCookieKey(cookieToRemove);
+    const updatedSyncList = currentSyncList.filter(c => getCookieKey(c) !== keyToRemove);
     await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedSyncList });
     const logMessage = `从同步列表移除: ${cookieToRemove.name}. 总计: ${updatedSyncList.length}`;
     addLog(logMessage, 'info');
@@ -249,7 +258,7 @@ async function getDecryptedSettings() {
         const bytes = CryptoJS.AES.decrypt(syncSettings.authToken, SECRET_KEY);
         const authToken = bytes.toString(CryptoJS.enc.Utf8);
         if (!authToken) throw new Error("解密后的Token为空。");
-        return { apiEndpoint: syncSettings.apiEndpoint, authToken };
+        return { apiEndpoint: syncSettings.apiEndpoint, authToken, ...syncSettings };
     } catch (e) {
         throw new Error('Auth Token解密失败，请检查设置。');
     }
@@ -277,8 +286,8 @@ async function handleManualSync() {
 
     const { [SYNC_LIST_STORAGE_KEY]: localSyncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
 
-    const mergedMap = new Map(localSyncList.map((c: Cookie) => [c.name + c.domain + c.path, c]));
-    remoteSyncList.forEach(c => { mergedMap.set(c.name + c.domain + c.path, c); });
+    const mergedMap = new Map(localSyncList.map((c: Cookie) => [getCookieKey(c), c]));
+    remoteSyncList.forEach(c => { mergedMap.set(getCookieKey(c), c); });
     const finalSyncList = Array.from(mergedMap.values());
 
     const postResponse = await fetch(apiEndpoint, {
@@ -294,26 +303,26 @@ async function handleManualSync() {
     return { message, total: finalSyncList.length };
 }
 
-// --- V6.0 & V7.0 Combined ---
+// --- V6.0 & V7.0 ---
 let monitoredCookies = new Set<string>();
 
 async function refreshMonitoredCookies() {
     const { syncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
-    monitoredCookies = new Set(syncList.map(c => c.name + c.domain + c.path));
+    monitoredCookies = new Set(syncList.map(c => getCookieKey(c)));
     console.log(`[CookieSyncer] Monitored cookies refreshed. Total: ${monitoredCookies.size}`);
 }
 
 chrome.cookies.onChanged.addListener(async (changeInfo) => {
     if (changeInfo.cause !== 'explicit' || changeInfo.removed) return;
-    const key = changeInfo.cookie.name + changeInfo.cookie.domain + changeInfo.cookie.path;
+    const key = getCookieKey(changeInfo.cookie);
     if (monitoredCookies.has(key)) {
         addLog(`检测到受监控的Cookie变更: ${key}，触发自动推送。`, 'info');
         try {
             const { apiEndpoint, authToken } = await getDecryptedSettings();
             const { [SYNC_LIST_STORAGE_KEY]: syncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
             
-            const updatedList = syncList.map((c: Cookie) => (c.name + c.domain + c.path) === key ? changeInfo.cookie : c);
-            if (!updatedList.some(c => (c.name + c.domain + c.path) === key)) {
+            const updatedList = syncList.map((c: Cookie) => getCookieKey(c) === key ? changeInfo.cookie : c);
+            if (!updatedList.some(c => getCookieKey(c) === key)) {
                 updatedList.push(changeInfo.cookie);
             }
 
@@ -333,46 +342,46 @@ chrome.cookies.onChanged.addListener(async (changeInfo) => {
 
 const KEEPALIVE_ALARM_NAME = 'cookieKeepAlive';
 
+// Temporary storage for keep-alive task data
+let keepAliveTaskData: {
+    preSnapshot: Map<string, { value: string, expirationDate: number }>,
+    syncList: Cookie[]
+} | null = null;
+
+
 chrome.runtime.onInstalled.addListener(() => {
     addLog('插件已安装/更新。', 'info');
-    chrome.alarms.get(KEEPALIVE_ALARM_NAME, (alarm) => {
-        if (!alarm) {
-            chrome.alarms.create(KEEPALIVE_ALARM_NAME, { periodInMinutes: 60 });
-            addLog('定时保活任务已创建。', 'info');
-        }
-    });
+    setupAlarms();
 });
+chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && (changes.syncList || changes.syncSettings)) {
+        refreshMonitoredCookies();
+        setupAlarms();
+    }
+});
+
+async function setupAlarms(){
+    const { syncSettings } = await chrome.storage.local.get('syncSettings');
+    const keepAliveFrequency = syncSettings?.keepAliveFrequency || 1;
+    await chrome.alarms.clear(KEEPALIVE_ALARM_NAME);
+    chrome.alarms.create(KEEPALIVE_ALARM_NAME, {
+        delayInMinutes: 1,
+        periodInMinutes: keepAliveFrequency
+    });
+    addLog(`保活任务已设置，频率: ${keepAliveFrequency} 分钟。`, 'info');
+}
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === KEEPALIVE_ALARM_NAME) {
-        addLog('定时保活任务触发。', 'info');
-        await handleKeepAlive();
+        try {
+            await handleKeepAlive();
+        } catch (e: any) {
+            await addLog(`[保活任务严重失败] ${e.message}`, 'error');
+            // Clean up task data on failure
+            keepAliveTaskData = null;
+        }
     }
 });
-
-async function handleKeepAlive() {
-    const { syncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
-    if(syncList.length === 0) {
-        addLog('同步列表为空，跳过保活任务。', 'info');
-        return;
-    }
-
-    const domainsToRefresh = new Set(syncList.map(c => getRegistrableDomain(c.domain)));
-    const urlsToVisit = Array.from(domainsToRefresh).map(d => `https://${d}`);
-
-    if (await hasOffscreenDocument()) {
-        chrome.runtime.sendMessage({ action: 'keepAlive', urls: urlsToVisit });
-    } else {
-        await chrome.offscreen.createDocument({
-            url: 'offscreen.html',
-            reasons: [chrome.offscreen.Reason.DOM_PARSER],
-            justification: 'Required to create iframes for silent cookie refresh.',
-        });
-        setTimeout(() => {
-             chrome.runtime.sendMessage({ action: 'keepAlive', urls: urlsToVisit });
-        }, 1000);
-    }
-}
 
 async function hasOffscreenDocument() {
     // @ts-ignore
@@ -380,10 +389,90 @@ async function hasOffscreenDocument() {
         // @ts-ignore
         const contexts = await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] });
         return contexts.length > 0;
-    } else {
-        const views = chrome.extension.getViews({ type: 'OFFSCREEN_DOCUMENT' });
-        return views.length > 0;
     }
+    return false;
+}
+
+async function handleKeepAlive() {
+    if (await hasOffscreenDocument()) {
+        await addLog('[保活警告] 上一个保活任务仍在运行，本次任务跳过。', 'error');
+        return;
+    }
+    
+    const { [SYNC_LIST_STORAGE_KEY]: syncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
+    if (syncList.length === 0) {
+        await addLog('同步列表为空，跳过保活任务。', 'info');
+        return;
+    }
+    
+    // --- Step 1: Create Pre-Snapshot in Service Worker ---
+    const preSnapshot = new Map<string, { value: string, expirationDate: number }>();
+    for (const cookie of syncList) {
+        try {
+            const foundCookie = await chrome.cookies.get({ url: `https://${cookie.domain.replace(/^\./, '')}/`, name: cookie.name });
+            if (foundCookie) {
+                preSnapshot.set(getCookieKey(foundCookie), { value: foundCookie.value, expirationDate: foundCookie.expirationDate || 0 });
+            }
+        } catch (e: any) {
+            await addLog(`[快照警告] 获取Cookie '${cookie.name}' for '${cookie.domain}' 失败: ${e.message}`, 'error');
+        }
+    }
+    await addLog(`创建了 ${preSnapshot.size} 个Cookie的保活前快照。`, 'info');
+
+    // Store data for post-task processing
+    keepAliveTaskData = { preSnapshot, syncList };
+
+    // --- Step 2: Start Offscreen Document for iframe loading ---
+    const domainsToRefresh = new Set(syncList.map(c => getRegistrableDomain(c.domain)));
+    const urlsToVisit = Array.from(domainsToRefresh).map(d => `https://${d}`);
+    
+    await addLog(`定时保活任务触发，准备为 ${urlsToVisit.length} 个域进行静默访问: ${Array.from(domainsToRefresh).join(', ')}`, 'info');
+    
+    const offscreenUrl = chrome.runtime.getURL(`offscreen/index.html?urls=${encodeURIComponent(JSON.stringify(urlsToVisit))}`);
+    
+    await chrome.offscreen.createDocument({
+        url: offscreenUrl,
+        reasons: [chrome.offscreen.Reason.DOM_PARSER],
+        justification: 'Required to create iframes for silent cookie refresh.',
+    });
+}
+
+async function handleKeepAlivePostTasks() {
+    if (!keepAliveTaskData) {
+        await addLog('[保活后处理警告] 任务数据丢失，无法对比快照。', 'error');
+        return;
+    }
+    const { preSnapshot, syncList } = keepAliveTaskData;
+
+    await addLog('静默访问完成，开始对比Cookie快照。', 'info');
+
+    for (const oldCookieKey of preSnapshot.keys()) {
+        const cookieInfo = syncList.find(c => getCookieKey(c) === oldCookieKey);
+        if(!cookieInfo) continue;
+
+        try {
+            const newCookie = await chrome.cookies.get({ url: `https://${cookieInfo.domain.replace(/^\./, '')}/`, name: cookieInfo.name });
+            const oldSnapshot = preSnapshot.get(oldCookieKey)!;
+
+            if (!newCookie) {
+                await addLog(`[保活警告] Cookie '${cookieInfo.name}' 在 ${cookieInfo.domain} 上已失效或被移除。`, 'error' );
+            } else {
+                if (newCookie.expirationDate && oldSnapshot.expirationDate && newCookie.expirationDate > oldSnapshot.expirationDate) {
+                     if (newCookie.value !== oldSnapshot.value) {
+                        await addLog(`[保活更新] Cookie '${newCookie.name}' 的值已更新，有效期已延长。`, 'success');
+                     } else {
+                        await addLog(`[保活成功] Cookie '${newCookie.name}' 的有效期已延长。`, 'success');
+                     }
+                }
+            }
+        } catch(e: any) {
+            await addLog(`[快照对比警告] 对比Cookie '${cookieInfo.name}' for '${cookieInfo.domain}' 失败: ${e.message}`, 'error');
+        }
+    }
+    
+    // Clean up
+    keepAliveTaskData = null;
+    await addLog('保活任务与日志记录全部完成。', 'info');
 }
 
 // Initial load
