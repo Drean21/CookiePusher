@@ -8,7 +8,17 @@ type Cookie = chrome.cookies.Cookie;
 
 const LOGS_STORAGE_KEY = 'cookieSyncerLogs';
 const SYNC_LIST_STORAGE_KEY = 'syncList';
+const STATS_STORAGE_KEY = 'keepAliveStats';
 const MAX_LOGS = 100;
+
+interface KeepAliveStat {
+    successCount: number;
+    failureCount: number;
+    history: {
+        status: 'success' | 'failure' | 'no-change';
+        timestamp: string;
+    }[];
+}
 
 async function addLog(message: string, type: 'info' | 'success' | 'error' = 'info') {
     const logEntry = {
@@ -114,6 +124,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             break;
         case 'addLog':
             if (payload) addLog(payload.message, payload.type);
+            break;
+        case 'getKeepAliveStats':
+            isAsync = true;
+            chrome.storage.local.get(STATS_STORAGE_KEY, (result) => {
+                sendResponse({ success: true, stats: result[STATS_STORAGE_KEY] || {} });
+            });
             break;
         case 'keepAliveTaskFinished':
             isAsync = true;

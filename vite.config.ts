@@ -24,16 +24,23 @@ export default defineConfig(({ mode }) => ({
         popup: resolve(__dirname, 'src/popup/index.html'),
         background: resolve(__dirname, 'src/background/index.ts'),
         offscreen: resolve(__dirname, 'src/offscreen/index.html'),
+        stats: resolve(__dirname, 'src/stats/index.html'),
       },
       output: {
         entryFileNames: (chunkInfo) => {
-          return chunkInfo.name === 'offscreen' ? 'offscreen/index.js' : '[name]/index.js';
+          if (chunkInfo.name === 'offscreen') return 'offscreen/index.js';
+          if (chunkInfo.name === 'stats') return 'stats/index.js';
+          return '[name]/index.js';
         },
         chunkFileNames: 'chunks/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
-          // offscreen.html 直接输出到根目录
-          if (assetInfo.name === 'index.html' && assetInfo.source.includes('<title>CookieSyncer Offscreen</title>')) {
-            return 'offscreen/index.html';
+          if (assetInfo.name === 'index.html') {
+             if (assetInfo.source.includes('<title>CookieSyncer Offscreen</title>')) {
+               return 'offscreen/index.html';
+             }
+             if (assetInfo.source.includes('<title>续期统计</title>')) {
+               return 'stats/index.html';
+             }
           }
           return 'assets/[name]-[hash].[ext]';
         },
