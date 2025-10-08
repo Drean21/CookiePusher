@@ -35,7 +35,7 @@
             id="api-endpoint"
             type="text"
             v-model="syncSettings.apiEndpoint"
-            placeholder="例如: https://my-service.com/api/cookies"
+            placeholder="例如: http://localhost:8080"
           />
         </div>
         <div class="setting-item">

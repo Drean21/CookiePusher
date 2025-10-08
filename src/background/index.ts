@@ -280,7 +280,13 @@ async function getDecryptedSettings() {
         const bytes = CryptoJS.AES.decrypt(syncSettings.authToken, SECRET_KEY);
         const authToken = bytes.toString(CryptoJS.enc.Utf8);
         if (!authToken) throw new Error("解密后的Token为空。");
-        return { apiEndpoint: syncSettings.apiEndpoint, authToken, ...syncSettings };
+        // Explicitly return a new object with the decrypted token.
+        // This avoids the bug where the encrypted token overwrites the decrypted one.
+        return {
+            apiEndpoint: syncSettings.apiEndpoint,
+            authToken: authToken,
+            keepAliveFrequency: syncSettings.keepAliveFrequency
+        };
     } catch (e) {
         throw new Error('Auth Token解密失败，请检查设置。');
     }
@@ -288,41 +294,67 @@ async function getDecryptedSettings() {
 
 async function handleTestApiConnection() {
     const { apiEndpoint, authToken } = await getDecryptedSettings();
-    const response = await fetch(apiEndpoint, {
+    const url = new URL(apiEndpoint);
+    url.pathname = '/api/v1/auth/test';
+    
+    const response = await fetch(url.toString(), {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' }
     });
-    if (!response.ok) throw new Error(`服务器响应错误: ${response.status} ${response.statusText}`);
-    addLog('API连接测试成功。', 'success');
+
+    if (!response.ok) {
+        if (response.status === 401) {
+            throw new Error('认证失败: API密钥无效或已过期。');
+        }
+        throw new Error(`服务器响应错误: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    if (data.code !== 200 || data.message !== 'Token is valid') {
+        throw new Error(`认证接口响应异常: ${JSON.stringify(data)}`);
+    }
+    
+    addLog('API连接和认证测试成功！', 'success');
     return { connected: true };
 }
 
 async function handleManualSync() {
     await addLog('手动同步开始...', 'info');
     const { apiEndpoint, authToken } = await getDecryptedSettings();
-    
-    const response = await fetch(apiEndpoint, { method: 'GET', headers: { 'Authorization': `Bearer ${authToken}` } });
-    if (!response.ok) throw new Error(`从云端拉取数据失败: ${response.status}`);
-    const remoteData = await response.json();
-    const remoteSyncList: Cookie[] = remoteData?.data?.syncList || [];
-
     const { [SYNC_LIST_STORAGE_KEY]: localSyncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
 
-    const mergedMap = new Map(localSyncList.map((c: Cookie) => [getCookieKey(c), c]));
-    remoteSyncList.forEach(c => { mergedMap.set(getCookieKey(c), c); });
-    const finalSyncList = Array.from(mergedMap.values());
+    if (localSyncList.length === 0) {
+        const message = "本地没有需要同步的Cookie，任务跳过。";
+        await addLog(message, 'info');
+        return { message, total: 0 };
+    }
 
-    const postResponse = await fetch(apiEndpoint, {
+    const syncUrl = new URL(apiEndpoint);
+    syncUrl.pathname = '/api/v1/sync';
+
+    const response = await fetch(syncUrl.toString(), {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ syncList: finalSyncList })
+        body: JSON.stringify(localSyncList)
     });
-    if (!postResponse.ok) throw new Error(`推送到云端失败: ${postResponse.status}`);
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`推送到云端失败: ${response.status} - ${errorBody}`);
+    }
     
-    await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: finalSyncList });
-    const message = `手动同步成功！本地与云端共合并了 ${finalSyncList.length} 个Cookie。`;
+    const responseData = await response.json();
+
+    if (responseData.code !== 200 || !Array.isArray(responseData.data)) {
+        throw new Error(`同步响应格式错误: ${JSON.stringify(responseData)}`);
+    }
+    
+    // Save the authoritative list from the server back to local storage
+    await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: responseData.data });
+
+    const message = `手动同步成功！云端现在有 ${responseData.data.length} 个Cookie。`;
     addLog(message, 'success');
-    return { message, total: finalSyncList.length };
+    return { message, total: responseData.data.length };
 }
 
 // --- V6.0 & V7.0 ---
@@ -349,11 +381,18 @@ chrome.cookies.onChanged.addListener(async (changeInfo) => {
 
             await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedList });
 
-            await fetch(apiEndpoint, {
+            const syncUrl = new URL(apiEndpoint);
+            syncUrl.pathname = '/api/v1/sync';
+            const response = await fetch(syncUrl.toString(), {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ syncList: updatedList })
+                body: JSON.stringify(updatedList)
             });
+
+            if (!response.ok) {
+                const errorBody = await response.text();
+                throw new Error(`自动推送失败: ${response.status} - ${errorBody}`);
+            }
             addLog(`自动推送 ${key} 成功。`, 'success');
         } catch (e: any) {
             addLog(`自动推送失败: ${e.message}`, 'error');
