@@ -17,6 +17,9 @@
         <a @click="activeView = 'managed'" :class="{ active: activeView === 'managed' }"
           >域名管理</a
         >
+        <a @click="activeView = 'stats'" :class="{ active: activeView === 'stats' }"
+          >统计</a
+        >
         <a @click="activeView = 'settings'" :class="{ active: activeView === 'settings' }"
           >设置</a
         >
@@ -30,8 +33,9 @@ import { computed, ref, provide } from "vue";
 import CurrentPageView from "./views/CurrentPageView.vue";
 import ManagedDomainsView from "./views/ManagedDomainsView.vue";
 import SettingsView from "./views/SettingsView.vue";
+import StatsView from "./views/StatsView.vue";
 
-type View = "current" | "managed" | "settings";
+type View = "current" | "managed" | "settings" | "stats";
 type NotificationType = 'success' | 'error' | 'info';
 
 const activeView = ref<View>("current");
@@ -63,6 +67,8 @@ const activeComponent = computed(() => {
       return CurrentPageView;
     case "managed":
       return ManagedDomainsView;
+   case "stats":
+       return StatsView;
     case "settings":
       return SettingsView;
     default:

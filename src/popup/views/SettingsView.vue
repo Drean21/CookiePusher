@@ -25,10 +25,6 @@
             <span>操作日志</span>
             <span class="arrow">></span>
           </li>
-          <li @click="openStatsPage">
-           <span>续期统计</span>
-           <span class="arrow">></span>
-         </li>
         </ul>
       </div>
 
@@ -195,10 +191,6 @@ const manualSync = async () => {
   } finally {
     isSyncing.value = false;
   }
-};
-
-const openStatsPage = () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('stats/index.html') });
 };
 
 onMounted(async () => {

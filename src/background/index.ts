@@ -18,6 +18,9 @@ interface KeepAliveStat {
         status: 'success' | 'failure' | 'no-change';
         timestamp: string;
     }[];
+    // Dynamically added fields
+    expirationDate?: number;
+    value?: string;
 }
 
 async function addLog(message: string, type: 'info' | 'success' | 'error' = 'info') {
@@ -127,9 +130,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             break;
         case 'getKeepAliveStats':
             isAsync = true;
-            chrome.storage.local.get(STATS_STORAGE_KEY, (result) => {
-                sendResponse({ success: true, stats: result[STATS_STORAGE_KEY] || {} });
-            });
+            handleGetKeepAliveStats()
+                .then(stats => sendResponse({ success: true, stats }))
+                .catch(error => {
+                    addLog(`获取统计数据失败: ${error.message}`, 'error');
+                    sendResponse({ success: false, error: error.message });
+                });
             break;
         case 'keepAliveTaskFinished':
             isAsync = true;
@@ -325,7 +331,6 @@ let monitoredCookies = new Set<string>();
 async function refreshMonitoredCookies() {
     const { syncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
     monitoredCookies = new Set(syncList.map(c => getCookieKey(c)));
-    console.log(`[CookieSyncer] Monitored cookies refreshed. Total: ${monitoredCookies.size}`);
 }
 
 chrome.cookies.onChanged.addListener(async (changeInfo) => {
@@ -459,36 +464,77 @@ async function handleKeepAlivePostTasks() {
         return;
     }
     const { preSnapshot, syncList } = keepAliveTaskData;
+    const { [STATS_STORAGE_KEY]: stats = {} } = await chrome.storage.local.get(STATS_STORAGE_KEY);
+    const timestamp = new Date().toISOString();
 
-    await addLog('静默访问完成，开始对比Cookie快照。', 'info');
+    await addLog('静默访问完成，开始对比Cookie快照并更新统计数据。', 'info');
 
     for (const oldCookieKey of preSnapshot.keys()) {
         const cookieInfo = syncList.find(c => getCookieKey(c) === oldCookieKey);
-        if(!cookieInfo) continue;
+        if (!cookieInfo) continue;
+        
+        const statKey = getCookieKey(cookieInfo);
+        if (!stats[statKey]) {
+            stats[statKey] = { successCount: 0, failureCount: 0, history: [] };
+        }
+        let currentStatus: 'success' | 'failure' | 'no-change' = 'no-change';
 
         try {
             const newCookie = await chrome.cookies.get({ url: `https://${cookieInfo.domain.replace(/^\./, '')}/`, name: cookieInfo.name });
             const oldSnapshot = preSnapshot.get(oldCookieKey)!;
 
             if (!newCookie) {
-                await addLog(`[保活警告] Cookie '${cookieInfo.name}' 在 ${cookieInfo.domain} 上已失效或被移除。`, 'error' );
+                await addLog(`[保活警告] Cookie '${cookieInfo.name}' 在 ${cookieInfo.domain} 上已失效或被移除。`, 'error');
+                stats[statKey].failureCount++;
+                currentStatus = 'failure';
             } else {
                 if (newCookie.expirationDate && oldSnapshot.expirationDate && newCookie.expirationDate > oldSnapshot.expirationDate) {
-                     if (newCookie.value !== oldSnapshot.value) {
+                    stats[statKey].successCount++;
+                    currentStatus = 'success';
+                    if (newCookie.value !== oldSnapshot.value) {
                         await addLog(`[保活更新] Cookie '${newCookie.name}' 的值已更新，有效期已延长。`, 'success');
-                     } else {
+                    } else {
                         await addLog(`[保活成功] Cookie '${newCookie.name}' 的有效期已延长。`, 'success');
-                     }
+                    }
                 }
             }
-        } catch(e: any) {
+        } catch (e: any) {
             await addLog(`[快照对比警告] 对比Cookie '${cookieInfo.name}' for '${cookieInfo.domain}' 失败: ${e.message}`, 'error');
+            stats[statKey].failureCount++;
+            currentStatus = 'failure';
+        }
+        
+        stats[statKey].history.unshift({ status: currentStatus, timestamp });
+        if (stats[statKey].history.length > 20) { // Limit history size
+            stats[statKey].history.length = 20;
         }
     }
-    
+
+    await chrome.storage.local.set({ [STATS_STORAGE_KEY]: stats });
+
     // Clean up
     keepAliveTaskData = null;
     await addLog('保活任务与日志记录全部完成。', 'info');
+}
+
+async function handleGetKeepAliveStats() {
+    const { [STATS_STORAGE_KEY]: stats = {} } = await chrome.storage.local.get(STATS_STORAGE_KEY);
+
+    // Enhance stats with live expiration dates
+    for (const key in stats) {
+        const cookieInfo = stats[key];
+        const [name, domain, ] = key.split('|');
+        try {
+            const liveCookie = await chrome.cookies.get({ url: `https://${domain.replace(/^\./, '')}/`, name });
+            if(liveCookie) {
+                cookieInfo.expirationDate = liveCookie.expirationDate;
+                cookieInfo.value = liveCookie.value;
+            }
+        } catch (e) {
+            // Ignore if cookie not found, it might have been deleted.
+        }
+    }
+    return stats;
 }
 
 // Initial load

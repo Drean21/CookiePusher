@@ -77,6 +77,7 @@
                     :class="{ disabled: !hasSelectedCookies(domain) }"
                     >复制选中</a
                   >
+                  <a @click.stop="copyCookiesForDomain(domain, 'synced')">复制同步序列</a>
                   <a @click.stop="copyCookiesForDomain(domain, 'all')">复制全部</a>
                 </div>
               </div>
@@ -113,26 +114,36 @@
           <p>正在获取实时Cookie...</p>
         </div>
         <div v-else-if="selectedDomain" class="cookie-group">
-          <div class="search-bar">
-            <input v-model="searchQuery" placeholder="筛选Cookie的名称或值..." />
-          </div>
-          <div class="filter-bar">
-            <div class="filter-item">
-              <select v-model="selectedSubDomain">
-                <option
-                  v-for="option in subDomainFilterOptions"
-                  :key="option.value"
-                  :value="option.value"
-                >
-                  {{ option.text }}
-                </option>
-              </select>
+          <div class="controls-container">
+            <div class="control-row">
+              <div class="search-bar">
+                <input v-model="searchQuery" placeholder="筛选Cookie的名称或值..." />
+              </div>
+              <div class="filter-item">
+                <select v-model="selectedSubDomain">
+                  <option
+                    v-for="option in subDomainFilterOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.text }}
+                  </option>
+                </select>
+              </div>
             </div>
-            <div class="filter-item">
-              <label>
-                <input type="checkbox" v-model="showOnlySelected" />
-                只显示选中
-              </label>
+            <div class="control-row">
+                <div class="filter-item">
+                  <label>
+                    <input type="checkbox" v-model="showOnlySelected" />
+                    只显示选中
+                  </label>
+                </div>
+                <div class="filter-item">
+                   <label>
+                     <input type="checkbox" v-model="showOnlyInSync" />
+                     只显示已同步
+                   </label>
+                 </div>
             </div>
           </div>
           <ul class="cookie-list">
@@ -144,7 +155,10 @@
               @click="toggleCookieSelection(cookie)"
             >
               <div class="cookie-info">
-                <strong class="cookie-name">{{ cookie.name }}</strong>
+                <div class="cookie-name-line">
+                   <strong class="cookie-name">{{ cookie.name }}</strong>
+                   <span class="cookie-domain-badge">{{ cookie.domain }}</span>
+                </div>
                 <span class="cookie-value-small">{{ cookie.value }}</span>
               </div>
               <div class="cookie-actions">
@@ -206,6 +220,7 @@ const selectedCookies = ref(new Set<string>());
 const activeDomainCopyMenu = ref<string | null>(null);
 const activeCopyMenu = ref<string | null>(null);
 const showOnlySelected = ref(false);
+const showOnlyInSync = ref(false);
 const selectedSubDomain = ref("all");
 
 const getCookieKey = (cookie: Cookie): string =>
@@ -246,6 +261,9 @@ const filteredCookies = computed(() => {
   }
   if (showOnlySelected.value) {
     cookies = cookies.filter((c) => isCookieSelected(c));
+  }
+  if (showOnlyInSync.value) {
+     cookies = cookies.filter(c => isCookieInSyncList(c));
   }
   return cookies;
 });
@@ -362,16 +380,19 @@ const toggleDomainCopyMenu = (domain: string) => {
   activeDomainCopyMenu.value = activeDomainCopyMenu.value === domain ? null : domain;
 };
 
-const copyCookiesForDomain = async (domain: string, type: "selected" | "all") => {
+const copyCookiesForDomain = async (domain: string, type: "selected" | "all" | "synced") => {
   activeDomainCopyMenu.value = null;
   let cookiesToCopy: Cookie[] = [];
 
-  if (type === "all") {
-    const response = await sendMessage("getCookiesForDomain", { domain });
-    if (response.success) cookiesToCopy = response.cookies;
-  } else if (type === "selected") {
-    cookiesToCopy = cookiesForSelectedDomain.value.filter((c) => isCookieSelected(c));
-  }
+   if (type === "all") {
+       const response = await sendMessage("getCookiesForDomain", { domain });
+       if (response.success) cookiesToCopy = response.cookies;
+   } else if (type === "selected") {
+       cookiesToCopy = cookiesForSelectedDomain.value.filter((c) => isCookieSelected(c));
+   } else if (type === 'synced') {
+       const allSynced = Array.from(syncListMap.value.values());
+       cookiesToCopy = allSynced.filter(c => getRegistrableDomain(c.domain) === domain);
+   }
 
   if (cookiesToCopy.length > 0) {
     const textToCopy = cookiesToCopy
@@ -507,8 +528,19 @@ onUnmounted(() => {
   overflow-y: auto;
   padding: 12px;
 }
+.controls-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.control-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
 .search-bar {
-  margin-bottom: 8px;
+  flex-grow: 1;
 }
 .search-bar input {
   width: 100%;
@@ -518,12 +550,8 @@ onUnmounted(() => {
   font-size: 14px;
   box-sizing: border-box;
 }
-.filter-bar {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  padding: 0 4px 12px 4px;
-  font-size: 13px;
+.filter-item {
+    font-size: 13px;
 }
 .filter-item select {
   border: 1px solid #ccc;
@@ -570,13 +598,24 @@ onUnmounted(() => {
   flex-grow: 1;
   margin-right: 10px;
 }
+.cookie-name-line {
+   display: flex;
+   align-items: baseline;
+   gap: 8px;
+}
 .cookie-name {
   font-weight: 600;
   font-size: 14px;
   color: #333;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+.cookie-domain-badge {
+   font-size: 11px;
+   background-color: #eee;
+   color: #555;
+   padding: 2px 6px;
+   border-radius: 4px;
+   font-family: monospace;
+   white-space: nowrap;
 }
 .cookie-value-small {
   font-size: 12px;
