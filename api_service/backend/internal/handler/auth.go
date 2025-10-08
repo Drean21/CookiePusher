@@ -25,9 +25,15 @@ func AuthMiddleware(db store.Store) func(http.Handler) http.Handler {
 
 			user, err := db.GetUserByAPIKey(apiKey)
 			if err != nil {
-				// Add critical logging for debugging authentication errors
-				log.Printf("[Auth Failed] Middleware rejected request. Reason: %v. Received API Key: '%s'", err, apiKey)
-				RespondWithError(w, http.StatusUnauthorized, "Invalid API Key")
+				// Check if the error is specifically "user not found"
+				if err.Error() == "user not found" {
+					log.Printf("[Auth Failed] Middleware rejected request. Reason: user not found. Received API Key: '%s'", apiKey)
+					RespondWithError(w, http.StatusUnauthorized, "Invalid API Key")
+				} else {
+					// For all other errors (like database locked), it's a server-side issue.
+					log.Printf("[Auth Error] Middleware encountered a database error. Reason: %v. Received API Key: '%s'", err, apiKey)
+					RespondWithError(w, http.StatusInternalServerError, "Internal Server Error during authentication")
+				}
 				return
 			}
 

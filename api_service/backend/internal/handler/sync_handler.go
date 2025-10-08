@@ -11,7 +11,7 @@ import (
 // It receives cookie data from the extension, processes it, and returns the full updated state.
 //
 // POST /api/v1/sync
-func SyncHandler(db store.Store) http.HandlerFunc {
+func SyncHandler(db store.Store, locker *UserLockManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// The user is authenticated by the middleware at this point.
 		user := UserFromContext(r.Context())
@@ -20,6 +20,10 @@ func SyncHandler(db store.Store) http.HandlerFunc {
 			RespondWithError(w, http.StatusInternalServerError, "Could not identify user")
 			return
 		}
+
+		// Lock this user's operations to prevent race conditions.
+		locker.Lock(user.ID)
+		defer locker.Unlock(user.ID)
 
 		// 1. Decode JSON body into a slice of model.Cookie
 		var cookiesToSync []*model.Cookie

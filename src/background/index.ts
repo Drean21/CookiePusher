@@ -1,5 +1,5 @@
 /**
- * CookieSyncer - "Automatic & Non-Intrusive" Backend (V13 - Final Keep-Alive)
+ * CookieSyncer - "Automatic & Non-Intrusive" Backend
  */
 
 import CryptoJS from 'crypto-js';
@@ -335,7 +335,7 @@ async function handleManualSync() {
     const response = await fetch(syncUrl.toString(), {
         method: 'POST',
         headers: { 'x-api-key': authToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify(localSyncList)
+        body: JSON.stringify(localSyncList.map(transformCookieForAPI))
     });
 
     if (!response.ok) {
@@ -386,7 +386,7 @@ chrome.cookies.onChanged.addListener(async (changeInfo) => {
             const response = await fetch(syncUrl.toString(), {
                 method: 'POST',
                 headers: { 'x-api-key': authToken, 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedList)
+                body: JSON.stringify(updatedList.map(transformCookieForAPI))
             });
 
             if (!response.ok) {
@@ -574,6 +574,22 @@ async function handleGetKeepAliveStats() {
         }
     }
     return stats;
+}
+
+function transformCookieForAPI(cookie: Cookie): object {
+    // Transforms a chrome.cookies.Cookie object to the format expected by the Go backend API.
+    return {
+        domain: cookie.domain,
+        name: cookie.name,
+        value: cookie.value,
+        path: cookie.path,
+        // The backend expects http_only and same_site, which are different from the browser's camelCase.
+        http_only: cookie.httpOnly,
+        secure: cookie.secure,
+        same_site: cookie.sameSite || 'unspecified',
+        // Convert Unix timestamp (seconds) to ISO 8601 string for Go's time.Time
+        expires: cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toISOString() : null,
+    };
 }
 
 // Initial load

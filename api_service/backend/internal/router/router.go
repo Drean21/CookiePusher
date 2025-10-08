@@ -13,7 +13,7 @@ import (
 )
 
 // NewRouter creates and configures a new HTTP router using chi.
-func NewRouter(db store.Store) *chi.Mux {
+func NewRouter(db store.Store, locker *handler.UserLockManager) *chi.Mux {
 	r := chi.NewRouter()
 
 	// A good base middleware stack
@@ -35,7 +35,7 @@ func NewRouter(db store.Store) *chi.Mux {
 		r.Use(handler.AuthMiddleware(db))
 
 		// Endpoint for authenticating and syncing cookies
-		r.Post("/api/v1/sync", handler.SyncHandler(db))
+		r.Post("/api/v1/sync", handler.SyncHandler(db, locker))
 		
 		// Endpoint specifically for testing token validity
 		r.Get("/api/v1/auth/test", func(w http.ResponseWriter, r *http.Request) {

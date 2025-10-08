@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // SQLiteStore is a SQLite-backed implementation of the store.Store interface.
@@ -21,6 +23,11 @@ func New(dataSourceName string) (store.Store, error) {
 	}
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("could not connect to database: %w", err)
+	}
+	
+	// Enable WAL mode for better concurrency. This is crucial for handling multiple simultaneous requests.
+	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		return nil, fmt.Errorf("could not enable WAL mode: %w", err)
 	}
 
 	s := &SQLiteStore{db: db}
@@ -166,6 +173,15 @@ func (s *SQLiteStore) SyncCookies(userID int64, cookies []*model.Cookie) error {
 			now,
 		)
 		if err != nil {
+			// Log the exact cookie that caused the failure for detailed debugging
+			log.Error().
+				Err(err).
+				Int64("user_id", userID).
+				Str("domain", cookie.Domain).
+				Str("name", cookie.Name).
+				Str("value", cookie.Value).
+				Interface("expires", cookie.Expires).
+				Msg("Failed to execute statement for a cookie")
 			return fmt.Errorf("could not execute statement for cookie %s/%s: %w", cookie.Domain, cookie.Name, err)
 		}
 	}

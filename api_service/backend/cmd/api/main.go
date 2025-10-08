@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cookie-syncer/api/internal/handler"
 	"cookie-syncer/api/internal/router"
 	"cookie-syncer/api/internal/store/sqlitestore"
 	"net/http"
@@ -11,13 +12,13 @@ import (
 	_ "modernc.org/sqlite" // Import the pure Go SQLite driver
 )
 
-const dbFileName = "cookiesyncer.db"
+const dbFileName = "cookiesyncer.db?_busy_timeout=5000"
 
 func main() {
 	// Configure zerolog for pretty console output
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
-	// Initialize a new SQLite store.
+	// Initialize a new SQLite store. The _busy_timeout parameter is crucial for handling concurrent requests.
 	db, err := sqlitestore.New(dbFileName)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize database")
@@ -25,7 +26,8 @@ func main() {
 	log.Info().Msgf("Database initialized and connected at %s", dbFileName)
 
 	// Create a new router and pass the store to it.
-	mux := router.NewRouter(db)
+	lockManager := handler.NewUserLockManager()
+	mux := router.NewRouter(db, lockManager)
 	
 	// Print all registered routes
 	router.PrintRoutes(mux)
