@@ -44,6 +44,11 @@ func NewRouter(db store.Store) *chi.Mux {
 			user := handler.UserFromContext(r.Context())
 			handler.RespondWithJSON(w, http.StatusOK, "Token is valid", map[string]interface{}{"user_id": user.ID, "role": user.Role})
 		})
+
+		// Endpoints for retrieving cookies
+		r.Get("/api/v1/cookies/all", handler.GetAllCookiesHandler(db))
+		r.Get("/api/v1/cookies/{domain}", handler.GetDomainCookiesHandler(db))
+		r.Get("/api/v1/cookies/{domain}/{name}", handler.GetCookieValueHandler(db))
 	})
 
 	return r

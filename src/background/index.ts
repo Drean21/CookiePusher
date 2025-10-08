@@ -299,7 +299,7 @@ async function handleTestApiConnection() {
     
     const response = await fetch(url.toString(), {
         method: 'GET',
-        headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' }
+        headers: { 'x-api-key': authToken, 'Content-Type': 'application/json' }
     });
 
     if (!response.ok) {
@@ -334,7 +334,7 @@ async function handleManualSync() {
 
     const response = await fetch(syncUrl.toString(), {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        headers: { 'x-api-key': authToken, 'Content-Type': 'application/json' },
         body: JSON.stringify(localSyncList)
     });
 
@@ -385,7 +385,7 @@ chrome.cookies.onChanged.addListener(async (changeInfo) => {
             syncUrl.pathname = '/api/v1/sync';
             const response = await fetch(syncUrl.toString(), {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                headers: { 'x-api-key': authToken, 'Content-Type': 'application/json' },
                 body: JSON.stringify(updatedList)
             });
 

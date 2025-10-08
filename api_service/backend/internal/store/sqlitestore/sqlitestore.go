@@ -198,11 +198,46 @@ func (s *SQLiteStore) GetCookiesByUserID(userID int64) ([]*model.Cookie, error) 
 }
 
 func (s *SQLiteStore) GetCookiesByDomain(userID int64, domain string) ([]*model.Cookie, error) {
-	return nil, fmt.Errorf("not implemented")
+	// We use LIKE to match subdomains as well, e.g., "baidu.com" should match ".baidu.com"
+	query := `SELECT id, user_id, domain, name, value, path, expires, http_only, secure, same_site, last_updated_from_extension_at FROM cookies WHERE user_id = ? AND (domain = ? OR domain LIKE ?)`
+	likeDomain := "%." + domain
+	rows, err := s.db.Query(query, userID, domain, likeDomain)
+	if err != nil {
+		return nil, fmt.Errorf("could not query cookies by domain: %w", err)
+	}
+	defer rows.Close()
+
+	var cookies []*model.Cookie
+	for rows.Next() {
+		var c model.Cookie
+		err := rows.Scan(
+			&c.ID, &c.UserID, &c.Domain, &c.Name, &c.Value, &c.Path,
+			&c.Expires, &c.HTTPOnly, &c.Secure, &c.SameSite, &c.LastUpdatedFromExtensionAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("could not scan cookie row: %w", err)
+		}
+		cookies = append(cookies, &c)
+	}
+	return cookies, nil
 }
 
 func (s *SQLiteStore) GetCookieByName(userID int64, domain, name string) (*model.Cookie, error) {
-	return nil, fmt.Errorf("not implemented")
+	query := `SELECT id, user_id, domain, name, value, path, expires, http_only, secure, same_site, last_updated_from_extension_at FROM cookies WHERE user_id = ? AND domain = ? AND name = ?`
+	row := s.db.QueryRow(query, userID, domain, name)
+
+	var c model.Cookie
+	err := row.Scan(
+		&c.ID, &c.UserID, &c.Domain, &c.Name, &c.Value, &c.Path,
+		&c.Expires, &c.HTTPOnly, &c.Secure, &c.SameSite, &c.LastUpdatedFromExtensionAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("cookie not found")
+		}
+		return nil, fmt.Errorf("could not scan cookie row: %w", err)
+	}
+	return &c, nil
 }
 
 func (s *SQLiteStore) SearchCookies(domain, name string) ([]*model.Cookie, error) {

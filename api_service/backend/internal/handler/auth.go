@@ -6,7 +6,6 @@ import (
 	"cookie-syncer/api/internal/store"
 	"log"
 	"net/http"
-	"strings"
 )
 
 // contextKey is a custom type to avoid key collisions in context.
@@ -18,23 +17,16 @@ const userContextKey = contextKey("user")
 func AuthMiddleware(db store.Store) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				RespondWithError(w, http.StatusUnauthorized, "Authorization header required")
+			apiKey := r.Header.Get("x-api-key")
+			if apiKey == "" {
+				RespondWithError(w, http.StatusUnauthorized, "x-api-key header required")
 				return
 			}
-
-			parts := strings.Split(authHeader, " ")
-			if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-				RespondWithError(w, http.StatusUnauthorized, "Invalid Authorization header format")
-				return
-			}
-			apiKey := strings.TrimSpace(parts[1])
 
 			user, err := db.GetUserByAPIKey(apiKey)
 			if err != nil {
 				// Add critical logging for debugging authentication errors
-				log.Printf("[Auth Failed] Middleware rejected request. Reason: %v. Received API Key: '%s'. Full Header: '%s'", err, apiKey, authHeader)
+				log.Printf("[Auth Failed] Middleware rejected request. Reason: %v. Received API Key: '%s'", err, apiKey)
 				RespondWithError(w, http.StatusUnauthorized, "Invalid API Key")
 				return
 			}
