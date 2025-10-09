@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:backend": "cd api_service/backend && go run github.com/air-verse/air",
     "build": "vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit"

@@ -1,0 +1,37 @@
+# .air.toml
+# Config for air, a live-reloading tool for Go applications.
+
+# The root directory of our project
+root = "."
+# Temporary directory for builds
+tmp_dir = "tmp"
+
+[build]
+# The main entry point of our application
+cmd = "go build -o ./tmp/main.exe ./cmd/api/main.go"
+# Binary file to run
+bin = "tmp/main.exe"
+# Directories to watch for changes
+include_dir = ["cmd", "internal", "docs"]
+# File extensions to watch
+include_ext = ["go", "toml", "json"]
+# Directories to ignore
+exclude_dir = ["vendor"]
+# Don't run the app on the first build
+delay = 1000 # ms
+
+[log]
+# Show log time
+time = true
+
+[misc]
+# Delete tmp directory on exit
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = true
+
+# Custom build commands
+[cmd]
+# Command to generate swagger docs before building the binary
+pre_build_cmd = ["go run github.com/swaggo/swag/cmd/swag init -g cmd/api/main.go"]
