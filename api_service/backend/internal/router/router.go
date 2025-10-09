@@ -34,21 +34,23 @@ func NewRouter(db store.Store, locker *handler.UserLockManager) *chi.Mux {
 	r.Group(func(r chi.Router) {
 		r.Use(handler.AuthMiddleware(db))
 
-		// Endpoint for authenticating and syncing cookies
+		// User-specific, non-admin routes
 		r.Post("/api/v1/sync", handler.SyncHandler(db, locker))
-		
-		// Endpoint specifically for testing token validity
-		r.Get("/api/v1/auth/test", func(w http.ResponseWriter, r *http.Request) {
-			// If the request reaches here, the middleware has already validated the token.
-			// We can also retrieve the user from context to be extra sure.
-			user := handler.UserFromContext(r.Context())
-			handler.RespondWithJSON(w, http.StatusOK, "Token is valid", map[string]interface{}{"user_id": user.ID, "role": user.Role})
-		})
-
-		// Endpoints for retrieving cookies
+		r.Get("/api/v1/auth/test", handler.AuthTestHandler)
+		r.Post("/api/v1/auth/refresh-key", handler.RefreshSelfAPIKeyHandler(db))
 		r.Get("/api/v1/cookies/all", handler.GetAllCookiesHandler(db))
 		r.Get("/api/v1/cookies/{domain}", handler.GetDomainCookiesHandler(db))
 		r.Get("/api/v1/cookies/{domain}/{name}", handler.GetCookieValueHandler(db))
+	})
+
+	// Admin-only routes
+	r.Group(func(r chi.Router) {
+		r.Use(handler.AuthMiddleware(db))
+		r.Use(handler.AdminOnlyMiddleware)
+
+		r.Post("/api/v1/admin/users", handler.CreateUsersHandler(db))
+		r.Delete("/api/v1/admin/users", handler.DeleteUsersHandler(db))
+		r.Put("/api/v1/admin/users/keys", handler.AdminRefreshAPIKeysHandler(db))
 	})
 
 	return r

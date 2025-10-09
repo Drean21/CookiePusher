@@ -53,3 +53,29 @@ func UserFromContext(ctx context.Context) *model.User {
 	}
 	return user
 }
+
+// AdminOnlyMiddleware is a middleware to ensure only users with the 'admin' role can proceed.
+// It must be used AFTER the AuthMiddleware.
+func AdminOnlyMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := UserFromContext(r.Context())
+		if user == nil {
+			// This should not happen if AuthMiddleware is used before this.
+			RespondWithError(w, http.StatusInternalServerError, "Could not identify user")
+			return
+		}
+
+		if user.Role != "admin" {
+			RespondWithError(w, http.StatusForbidden, "Forbidden: Administrator access required")
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// AuthTestHandler is a simple handler to confirm that a token is valid.
+func AuthTestHandler(w http.ResponseWriter, r *http.Request) {
+	user := UserFromContext(r.Context())
+	RespondWithJSON(w, http.StatusOK, "Token is valid", map[string]interface{}{"user_id": user.ID, "role": user.Role})
+}
