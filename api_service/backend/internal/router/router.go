@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog/log"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // NewRouter creates and configures a new HTTP router using chi.
@@ -24,6 +25,9 @@ func NewRouter(db store.Store, locker *handler.UserLockManager) *chi.Mux {
 
 	// Set a timeout value on the request context (useful for databases and backend services)
 	r.Use(middleware.Timeout(60 * time.Second))
+
+	// Swagger documentation
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	// Unauthenticated routes
 	r.Get("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {

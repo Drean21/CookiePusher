@@ -1,0 +1,415 @@
+basePath: /api/v1
+definitions:
+  handler.APIResponse:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+    type: object
+  model.Cookie:
+    properties:
+      domain:
+        type: string
+      expires:
+        description: Use pointer to handle null/zero time
+        type: string
+      http_only:
+        type: boolean
+      id:
+        type: integer
+      last_updated_from_extension_at:
+        type: string
+      name:
+        type: string
+      path:
+        type: string
+      same_site:
+        type: string
+      secure:
+        type: boolean
+      user_id:
+        type: integer
+      value:
+        type: string
+    type: object
+  model.User:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      role:
+        type: string
+      updated_at:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: This is the API server for the Cookie Syncer browser extension.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  title: Cookie Syncer API
+  version: "1.0"
+paths:
+  /admin/users:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes users by their IDs or API keys. Only accessible by admins.
+      parameters:
+      - description: User IDs or API Keys to delete
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            api_keys:
+              items:
+                type: string
+              type: array
+            user_ids:
+              items:
+                type: integer
+              type: array
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  properties:
+                    total_deleted:
+                      type: integer
+                  type: object
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete one or more users
+      tags:
+      - Admin
+    post:
+      consumes:
+      - application/json
+      description: Creates new users with the 'user' role. Only accessible by admins.
+      parameters:
+      - description: Request body
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            count:
+              type: integer
+            role:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.User'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create one or more users
+      tags:
+      - Admin
+  /admin/users/keys:
+    put:
+      consumes:
+      - application/json
+      description: Generates new API keys for a list of user IDs. Only accessible
+        by admins.
+      parameters:
+      - description: User IDs to refresh
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            user_ids:
+              items:
+                type: integer
+              type: array
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.User'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Refresh API keys for users
+      tags:
+      - Admin
+  /auth/refresh-key:
+    post:
+      description: Invalidates the current API key and returns a new one.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  properties:
+                    new_api_key:
+                      type: string
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Refresh own API key
+      tags:
+      - Auth
+  /cookies/{domain}:
+    get:
+      description: Retrieves cookies for a specific domain. By default, returns an
+        HTTP header string. Use ?format=json to get structured JSON.
+      parameters:
+      - description: Domain
+        in: path
+        name: domain
+        required: true
+        type: string
+      - description: Output format
+        enum:
+        - json
+        in: query
+        name: format
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  type: string
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get cookies for a domain
+      tags:
+      - Cookies
+  /cookies/{domain}/{name}:
+    get:
+      description: Retrieves the raw value of a specific cookie, returned in the 'data'
+        field.
+      parameters:
+      - description: Domain
+        in: path
+        name: domain
+        required: true
+        type: string
+      - description: Cookie Name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  type: string
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get a single cookie's value
+      tags:
+      - Cookies
+  /cookies/all:
+    get:
+      description: Retrieves all cookies for the authenticated user. By default, groups
+        them by domain and returns them as HTTP header strings. Use ?format=json to
+        get structured JSON.
+      parameters:
+      - description: Output format
+        enum:
+        - json
+        in: query
+        name: format
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all cookies
+      tags:
+      - Cookies
+  /sync:
+    post:
+      consumes:
+      - application/json
+      description: Receives a list of cookies from the browser extension, persists
+        them using an UPSERT logic, and returns the full updated list of cookies for
+        the user.
+      parameters:
+      - description: List of cookies to sync
+        in: body
+        name: cookies
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/model.Cookie'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/model.Cookie'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Sync cookies
+      tags:
+      - Sync
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: x-api-key
+    type: apiKey
+swagger: "2.0"

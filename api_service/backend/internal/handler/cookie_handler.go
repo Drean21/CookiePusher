@@ -8,8 +8,17 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// GetAllCookiesHandler handles the request to get all cookies for a user, grouped by domain.
-// GET /api/v1/cookies/all
+// GetAllCookiesHandler handles the request to get all cookies for a user.
+// @Summary      Get all cookies
+// @Description  Retrieves all cookies for the authenticated user. By default, groups them by domain and returns them as HTTP header strings. Use ?format=json to get structured JSON.
+// @Tags         Cookies
+// @Produce      json
+// @Param        format query     string  false  "Output format"  Enums(json)
+// @Success      200    {object}  handler.APIResponse{data=object}
+// @Failure      401    {object}  handler.APIResponse
+// @Failure      500    {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /cookies/all [get]
 func GetAllCookiesHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := UserFromContext(r.Context())
@@ -54,9 +63,17 @@ func GetAllCookiesHandler(db store.Store) http.HandlerFunc {
 }
 
 // GetDomainCookiesHandler handles the request to get all cookies for a specific domain.
-// It defaults to returning a string formatted for HTTP headers.
-// Use ?format=json to get the full cookie objects.
-// GET /api/v1/cookies/{domain}
+// @Summary      Get cookies for a domain
+// @Description  Retrieves cookies for a specific domain. By default, returns an HTTP header string. Use ?format=json to get structured JSON.
+// @Tags         Cookies
+// @Produce      json
+// @Param        domain   path      string  true   "Domain"
+// @Param        format   query     string  false  "Output format"  Enums(json)
+// @Success      200      {object}  handler.APIResponse{data=string}
+// @Failure      401      {object}  handler.APIResponse
+// @Failure      500      {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /cookies/{domain} [get]
 func GetDomainCookiesHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := UserFromContext(r.Context())
@@ -90,8 +107,18 @@ func GetDomainCookiesHandler(db store.Store) http.HandlerFunc {
 }
 
 // GetCookieValueHandler handles the request to get the raw value of a specific cookie.
-// The value is returned inside the 'data' field of the standard API response.
-// GET /api/v1/cookies/{domain}/{name}
+// @Summary      Get a single cookie's value
+// @Description  Retrieves the raw value of a specific cookie, returned in the 'data' field.
+// @Tags         Cookies
+// @Produce      json
+// @Param        domain   path      string  true  "Domain"
+// @Param        name     path      string  true  "Cookie Name"
+// @Success      200      {object}  handler.APIResponse{data=string}
+// @Failure      401      {object}  handler.APIResponse
+// @Failure      404      {object}  handler.APIResponse
+// @Failure      500      {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /cookies/{domain}/{name} [get]
 func GetCookieValueHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := UserFromContext(r.Context())

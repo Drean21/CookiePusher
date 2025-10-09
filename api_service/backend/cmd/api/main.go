@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 
+	"cookie-syncer/api/docs" // Import the generated docs
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	_ "modernc.org/sqlite" // Import the pure Go SQLite driver
@@ -14,6 +16,19 @@ import (
 
 const dbFileName = "cookiesyncer.db?_busy_timeout=5000"
 
+// @title           Cookie Syncer API
+// @version         1.0
+// @description     This is the API server for the Cookie Syncer browser extension.
+// @contact.name   API Support
+// @contact.url    http://www.swagger.io/support
+// @contact.email  support@swagger.io
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+// @host            localhost:8080
+// @BasePath        /api/v1
+// @securityDefinitions.apiKey ApiKeyAuth
+// @in              header
+// @name            x-api-key
 func main() {
 	// Configure zerolog for pretty console output
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
@@ -31,6 +46,10 @@ func main() {
 	
 	// Print all registered routes
 	router.PrintRoutes(mux)
+
+	// Dynamically set swagger host
+	docs.SwaggerInfo.Host = "localhost:8080"
+	log.Info().Msgf("Swagger UI is available at http://%s/swagger/index.html", docs.SwaggerInfo.Host)
 
 	log.Info().Msg("Starting API server on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {

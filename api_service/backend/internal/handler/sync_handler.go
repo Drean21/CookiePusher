@@ -8,9 +8,18 @@ import (
 )
 
 // SyncHandler handles the main data synchronization endpoint.
-// It receives cookie data from the extension, processes it, and returns the full updated state.
-//
-// POST /api/v1/sync
+// @Summary      Sync cookies
+// @Description  Receives a list of cookies from the browser extension, persists them using an UPSERT logic, and returns the full updated list of cookies for the user.
+// @Tags         Sync
+// @Accept       json
+// @Produce      json
+// @Param        cookies body      []model.Cookie  true  "List of cookies to sync"
+// @Success      200     {object}  handler.APIResponse{data=[]model.Cookie}
+// @Failure      400     {object}  handler.APIResponse
+// @Failure      401     {object}  handler.APIResponse
+// @Failure      500     {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /sync [post]
 func SyncHandler(db store.Store, locker *UserLockManager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// The user is authenticated by the middleware at this point.

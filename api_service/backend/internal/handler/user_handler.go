@@ -9,7 +9,18 @@ import (
 )
 
 // CreateUsersHandler handles bulk user creation (Admin only).
-// POST /api/v1/admin/users
+// @Summary      Create one or more users
+// @Description  Creates new users with the 'user' role. Only accessible by admins.
+// @Tags         Admin
+// @Accept       json
+// @Produce      json
+// @Param        body body object{count=int,role=string} true "Request body"
+// @Success      201  {object}  handler.APIResponse{data=[]model.User}
+// @Failure      400  {object}  handler.APIResponse
+// @Failure      403  {object}  handler.APIResponse
+// @Failure      500  {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /admin/users [post]
 func CreateUsersHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
@@ -39,7 +50,18 @@ func CreateUsersHandler(db store.Store) http.HandlerFunc {
 }
 
 // DeleteUsersHandler handles bulk user deletion (Admin only).
-// DELETE /api/v1/admin/users
+// @Summary      Delete one or more users
+// @Description  Deletes users by their IDs or API keys. Only accessible by admins.
+// @Tags         Admin
+// @Accept       json
+// @Produce      json
+// @Param        body body object{user_ids=[]int,api_keys=[]string} true "User IDs or API Keys to delete"
+// @Success      200  {object}  handler.APIResponse{data=object{total_deleted=int}}
+// @Failure      400  {object}  handler.APIResponse
+// @Failure      403  {object}  handler.APIResponse
+// @Failure      500  {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /admin/users [delete]
 func DeleteUsersHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
@@ -79,7 +101,15 @@ func DeleteUsersHandler(db store.Store) http.HandlerFunc {
 }
 
 // RefreshSelfAPIKeyHandler allows a user to refresh their own API key.
-// POST /api/v1/auth/refresh-key
+// @Summary      Refresh own API key
+// @Description  Invalidates the current API key and returns a new one.
+// @Tags         Auth
+// @Produce      json
+// @Success      200  {object}  handler.APIResponse{data=object{new_api_key=string}}
+// @Failure      401  {object}  handler.APIResponse
+// @Failure      500  {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /auth/refresh-key [post]
 func RefreshSelfAPIKeyHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := UserFromContext(r.Context())
@@ -98,7 +128,18 @@ func RefreshSelfAPIKeyHandler(db store.Store) http.HandlerFunc {
 }
 
 // AdminRefreshAPIKeysHandler allows an admin to refresh keys for multiple users.
-// PUT /api/v1/admin/users/keys
+// @Summary      Refresh API keys for users
+// @Description  Generates new API keys for a list of user IDs. Only accessible by admins.
+// @Tags         Admin
+// @Accept       json
+// @Produce      json
+// @Param        body body object{user_ids=[]int} true "User IDs to refresh"
+// @Success      200  {object}  handler.APIResponse{data=[]model.User}
+// @Failure      400  {object}  handler.APIResponse
+// @Failure      403  {object}  handler.APIResponse
+// @Failure      500  {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /admin/users/keys [put]
 func AdminRefreshAPIKeysHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {
