@@ -17,7 +17,7 @@ type SQLiteStore struct {
 	db *sql.DB
 }
 
-// New creates a new SQLiteStore, opens the database connection, and initializes the schema.
+// New creates a new SQLiteStore, opens the database connection, and initializes/migrates the schema.
 func New(dataSourceName string) (store.Store, error) {
 	db, err := sql.Open("sqlite", dataSourceName)
 	if err != nil {
@@ -34,8 +34,9 @@ func New(dataSourceName string) (store.Store, error) {
 
 	s := &SQLiteStore{db: db}
 
-	if err := s.initSchema(); err != nil {
-		return nil, fmt.Errorf("could not initialize database schema: %w", err)
+	// Run migrations to ensure schema is up to date.
+	if err := s.migrate(); err != nil {
+		return nil, fmt.Errorf("could not migrate database schema: %w", err)
 	}
 
 	// Check and create default admin user if the database is empty
@@ -57,8 +58,57 @@ func New(dataSourceName string) (store.Store, error) {
 	return s, nil
 }
 
-// initSchema creates the necessary tables if they don't exist.
-func (s *SQLiteStore) initSchema() error {
+// migrate handles database schema migrations.
+func (s *SQLiteStore) migrate() error {
+	// 1. Create meta table if it doesn't exist
+	_, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);`)
+	if err != nil {
+		return fmt.Errorf("could not create meta table: %w", err)
+	}
+
+	// 2. Get current schema version
+	var version int
+	err = s.db.QueryRow(`SELECT value FROM meta WHERE key = 'version'`).Scan(&version)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			version = 0 // Database is new or pre-versioning
+		} else {
+			return fmt.Errorf("could not get schema version: %w", err)
+		}
+	}
+	
+	// 3. Apply migrations in order
+	if version < 1 {
+		log.Info().Msg("Running migration v1: Initial schema creation...")
+		if err := s.migrationV1(); err != nil {
+			return err
+		}
+		if err := s.setVersion(1); err != nil {
+			return err
+		}
+		log.Info().Msg("Migration v1 successful.")
+	}
+
+	if version < 2 {
+		log.Info().Msg("Running migration v2: Add sharing features...")
+		if err := s.migrationV2(); err != nil {
+			return err
+		}
+		if err := s.setVersion(2); err != nil {
+			return err
+		}
+		log.Info().Msg("Migration v2 successful.")
+	}
+
+	return nil
+}
+
+func (s *SQLiteStore) setVersion(version int) error {
+	_, err := s.db.Exec(`INSERT OR REPLACE INTO meta (key, value) VALUES ('version', ?)`, version)
+	return err
+}
+
+func (s *SQLiteStore) migrationV1() error {
 	usersTable := `
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,19 +135,36 @@ func (s *SQLiteStore) initSchema() error {
 		UNIQUE(user_id, domain, name)
 	);`
 
-	_, err := s.db.Exec(usersTable)
-	if err != nil {
-		return err
-	}
-	_, err = s.db.Exec(cookiesTable)
-	return err
+	if _, err := s.db.Exec(usersTable); err != nil { return err }
+	if _, err := s.db.Exec(cookiesTable); err != nil { return err }
+	return nil
 }
 
+func (s *SQLiteStore) migrationV2() error {
+	// Add sharing_enabled to users table
+	_, err := s.db.Exec(`ALTER TABLE users ADD COLUMN sharing_enabled BOOLEAN NOT NULL DEFAULT 0;`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("could not add sharing_enabled to users: %w", err)
+	}
+
+	// Add is_sharable to cookies table
+	_, err = s.db.Exec(`ALTER TABLE cookies ADD COLUMN is_sharable BOOLEAN NOT NULL DEFAULT 0;`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("could not add is_sharable to cookies: %w", err)
+	}
+
+	return nil
+}
+
+
+// --- User Methods ---
+
 func (s *SQLiteStore) GetUserByAPIKey(apiKey string) (*model.User, error) {
-	query := `SELECT id, api_key, role, created_at, updated_at FROM users WHERE api_key = ?`
+	query := `SELECT id, api_key, role, sharing_enabled, created_at, updated_at FROM users WHERE api_key = ?`
 	row := s.db.QueryRow(query, apiKey)
+
 	var user model.User
-	err := row.Scan(&user.ID, &user.APIKey, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	err := row.Scan(&user.ID, &user.APIKey, &user.Role, &user.SharingEnabled, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("user not found")
@@ -106,12 +173,11 @@ func (s *SQLiteStore) GetUserByAPIKey(apiKey string) (*model.User, error) {
 	}
 	return &user, nil
 }
-
 func (s *SQLiteStore) GetUserByID(userID int64) (*model.User, error) {
-	query := `SELECT id, api_key, role, created_at, updated_at FROM users WHERE id = ?`
+	query := `SELECT id, api_key, role, sharing_enabled, created_at, updated_at FROM users WHERE id = ?`
 	row := s.db.QueryRow(query, userID)
 	var user model.User
-	err := row.Scan(&user.ID, &user.APIKey, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	err := row.Scan(&user.ID, &user.APIKey, &user.Role, &user.SharingEnabled, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("user not found")
@@ -123,9 +189,10 @@ func (s *SQLiteStore) GetUserByID(userID int64) (*model.User, error) {
 
 // CreateUser is a helper for creating a single user, used for initialization.
 func (s *SQLiteStore) CreateUser(apiKey, role string) (*model.User, error) {
-	query := `INSERT INTO users (api_key, role, created_at, updated_at) VALUES (?, ?, ?, ?)`
+	query := `INSERT INTO users (api_key, role, sharing_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
 	now := time.Now()
-	res, err := s.db.Exec(query, apiKey, role, now, now)
+	// New users have sharing disabled by default.
+	res, err := s.db.Exec(query, apiKey, role, false, now, now)
 	if err != nil {
 		return nil, fmt.Errorf("could not insert user: %w", err)
 	}
@@ -133,7 +200,7 @@ func (s *SQLiteStore) CreateUser(apiKey, role string) (*model.User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not get last insert ID: %w", err)
 	}
-	return &model.User{ID: id, APIKey: apiKey, Role: role, CreatedAt: now, UpdatedAt: now}, nil
+	return &model.User{ID: id, APIKey: apiKey, Role: role, SharingEnabled: false, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func (s *SQLiteStore) CreateUsers(count int, role string) ([]*model.User, error) {
@@ -143,7 +210,7 @@ func (s *SQLiteStore) CreateUsers(count int, role string) ([]*model.User, error)
 	}
 	defer tx.Rollback()
 
-	query := `INSERT INTO users (api_key, role, created_at, updated_at) VALUES (?, ?, ?, ?)`
+	query := `INSERT INTO users (api_key, role, sharing_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
 	stmt, err := tx.Prepare(query)
 	if err != nil {
 		return nil, fmt.Errorf("could not prepare statement: %w", err)
@@ -154,7 +221,7 @@ func (s *SQLiteStore) CreateUsers(count int, role string) ([]*model.User, error)
 	for i := 0; i < count; i++ {
 		apiKey := uuid.New().String()
 		now := time.Now()
-		res, err := stmt.Exec(apiKey, role, now, now)
+		res, err := stmt.Exec(apiKey, role, false, now, now)
 		if err != nil {
 			return nil, fmt.Errorf("could not insert user %d: %w", i+1, err)
 		}
@@ -162,7 +229,7 @@ func (s *SQLiteStore) CreateUsers(count int, role string) ([]*model.User, error)
 		if err != nil {
 			return nil, fmt.Errorf("could not get last insert ID for user %d: %w", i+1, err)
 		}
-		createdUsers = append(createdUsers, &model.User{ID: id, APIKey: apiKey, Role: role, CreatedAt: now, UpdatedAt: now})
+		createdUsers = append(createdUsers, &model.User{ID: id, APIKey: apiKey, Role: role, SharingEnabled: false, CreatedAt: now, UpdatedAt: now})
 	}
 
 	return createdUsers, tx.Commit()
@@ -246,6 +313,25 @@ func (s *SQLiteStore) UpdateUserAPIKey(userID int64, newAPIKey string) error {
 	return nil
 }
 
+func (s *SQLiteStore) UpdateUserSharing(userID int64, enabled bool) error {
+	query := `UPDATE users SET sharing_enabled = ? WHERE id = ?`
+	res, err := s.db.Exec(query, enabled, userID)
+	if err != nil {
+		return fmt.Errorf("could not update user sharing status: %w", err)
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("could not get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
+
+// --- Cookie Methods ---
+
 func (s *SQLiteStore) SyncCookies(userID int64, cookies []*model.Cookie) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -254,8 +340,8 @@ func (s *SQLiteStore) SyncCookies(userID int64, cookies []*model.Cookie) error {
 	defer tx.Rollback()
 
 	query := `
-	INSERT INTO cookies (user_id, domain, name, value, path, expires, http_only, secure, same_site, last_updated_from_extension_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO cookies (user_id, domain, name, value, path, expires, http_only, secure, same_site, is_sharable, last_updated_from_extension_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(user_id, domain, name) DO UPDATE SET
 		value = excluded.value,
 		path = excluded.path,
@@ -263,6 +349,7 @@ func (s *SQLiteStore) SyncCookies(userID int64, cookies []*model.Cookie) error {
 		http_only = excluded.http_only,
 		secure = excluded.secure,
 		same_site = excluded.same_site,
+		is_sharable = excluded.is_sharable,
 		last_updated_from_extension_at = excluded.last_updated_from_extension_at;
 	`
 	stmt, err := tx.Prepare(query)
@@ -283,6 +370,7 @@ func (s *SQLiteStore) SyncCookies(userID int64, cookies []*model.Cookie) error {
 			cookie.HTTPOnly,
 			cookie.Secure,
 			cookie.SameSite,
+			cookie.IsSharable,
 			now,
 		)
 		if err != nil {
@@ -302,18 +390,19 @@ func (s *SQLiteStore) SyncCookies(userID int64, cookies []*model.Cookie) error {
 }
 
 func (s *SQLiteStore) GetCookiesByUserID(userID int64) ([]*model.Cookie, error) {
-	query := `SELECT id, user_id, domain, name, value, path, expires, http_only, secure, same_site, last_updated_from_extension_at FROM cookies WHERE user_id = ?`
+	query := `SELECT id, user_id, domain, name, value, path, expires, http_only, secure, same_site, is_sharable, last_updated_from_extension_at FROM cookies WHERE user_id = ?`
 	rows, err := s.db.Query(query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("could not query cookies: %w", err)
 	}
 	defer rows.Close()
+
 	var cookies []*model.Cookie
 	for rows.Next() {
 		var c model.Cookie
 		err := rows.Scan(
 			&c.ID, &c.UserID, &c.Domain, &c.Name, &c.Value, &c.Path,
-			&c.Expires, &c.HTTPOnly, &c.Secure, &c.SameSite, &c.LastUpdatedFromExtensionAt,
+			&c.Expires, &c.HTTPOnly, &c.Secure, &c.SameSite, &c.IsSharable, &c.LastUpdatedFromExtensionAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("could not scan cookie row: %w", err)
@@ -322,9 +411,8 @@ func (s *SQLiteStore) GetCookiesByUserID(userID int64) ([]*model.Cookie, error) 
 	}
 	return cookies, nil
 }
-
 func (s *SQLiteStore) GetCookiesByDomain(userID int64, domain string) ([]*model.Cookie, error) {
-	query := `SELECT id, user_id, domain, name, value, path, expires, http_only, secure, same_site, last_updated_from_extension_at FROM cookies WHERE user_id = ? AND (domain = ? OR domain LIKE ?)`
+	query := `SELECT id, user_id, domain, name, value, path, expires, http_only, secure, same_site, is_sharable, last_updated_from_extension_at FROM cookies WHERE user_id = ? AND (domain = ? OR domain LIKE ?)`
 	likeDomain := "%." + domain
 	rows, err := s.db.Query(query, userID, domain, likeDomain)
 	if err != nil {
@@ -336,7 +424,7 @@ func (s *SQLiteStore) GetCookiesByDomain(userID int64, domain string) ([]*model.
 		var c model.Cookie
 		err := rows.Scan(
 			&c.ID, &c.UserID, &c.Domain, &c.Name, &c.Value, &c.Path,
-			&c.Expires, &c.HTTPOnly, &c.Secure, &c.SameSite, &c.LastUpdatedFromExtensionAt,
+			&c.Expires, &c.HTTPOnly, &c.Secure, &c.SameSite, &c.IsSharable, &c.LastUpdatedFromExtensionAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("could not scan cookie row: %w", err)
@@ -347,12 +435,12 @@ func (s *SQLiteStore) GetCookiesByDomain(userID int64, domain string) ([]*model.
 }
 
 func (s *SQLiteStore) GetCookieByName(userID int64, domain, name string) (*model.Cookie, error) {
-	query := `SELECT id, user_id, domain, name, value, path, expires, http_only, secure, same_site, last_updated_from_extension_at FROM cookies WHERE user_id = ? AND domain = ? AND name = ?`
+	query := `SELECT id, user_id, domain, name, value, path, expires, http_only, secure, same_site, is_sharable, last_updated_from_extension_at FROM cookies WHERE user_id = ? AND domain = ? AND name = ?`
 	row := s.db.QueryRow(query, userID, domain, name)
 	var c model.Cookie
 	err := row.Scan(
 		&c.ID, &c.UserID, &c.Domain, &c.Name, &c.Value, &c.Path,
-		&c.Expires, &c.HTTPOnly, &c.Secure, &c.SameSite, &c.LastUpdatedFromExtensionAt,
+		&c.Expires, &c.HTTPOnly, &c.Secure, &c.SameSite, &c.IsSharable, &c.LastUpdatedFromExtensionAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -362,6 +450,37 @@ func (s *SQLiteStore) GetCookieByName(userID int64, domain, name string) (*model
 	}
 	return &c, nil
 }
+
+func (s *SQLiteStore) GetSharableCookiesByDomain(domain string) ([]*model.Cookie, error) {
+	query := `
+		SELECT c.id, c.user_id, c.domain, c.name, c.value, c.path, c.expires, c.http_only, c.secure, c.same_site, c.is_sharable, c.last_updated_from_extension_at
+		FROM cookies c
+		JOIN users u ON c.user_id = u.id
+		WHERE u.sharing_enabled = 1
+		  AND c.is_sharable = 1
+		  AND (c.domain = ? OR c.domain LIKE ?)`
+	likeDomain := "%." + domain
+	rows, err := s.db.Query(query, domain, likeDomain)
+	if err != nil {
+		return nil, fmt.Errorf("could not query sharable cookies: %w", err)
+	}
+	defer rows.Close()
+
+	var cookies []*model.Cookie
+	for rows.Next() {
+		var c model.Cookie
+		err := rows.Scan(
+			&c.ID, &c.UserID, &c.Domain, &c.Name, &c.Value, &c.Path,
+			&c.Expires, &c.HTTPOnly, &c.Secure, &c.SameSite, &c.IsSharable, &c.LastUpdatedFromExtensionAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("could not scan sharable cookie row: %w", err)
+		}
+		cookies = append(cookies, &c)
+	}
+	return cookies, nil
+}
+
 
 func (s *SQLiteStore) SearchCookies(domain, name string) ([]*model.Cookie, error) {
 	return nil, fmt.Errorf("not implemented")

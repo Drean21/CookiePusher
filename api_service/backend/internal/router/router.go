@@ -45,6 +45,10 @@ func NewRouter(db store.Store, locker *handler.UserLockManager) *chi.Mux {
 		r.Get("/api/v1/cookies/all", handler.GetAllCookiesHandler(db))
 		r.Get("/api/v1/cookies/{domain}", handler.GetDomainCookiesHandler(db))
 		r.Get("/api/v1/cookies/{domain}/{name}", handler.GetCookieValueHandler(db))
+
+		// Sharing related endpoints
+		r.Put("/api/v1/user/settings", handler.UpdateUserSettingsHandler(db))
+		r.Get("/api/v1/pool/cookies/{domain}", handler.GetSharableCookiesHandler(db))
 	})
 
 	// Admin-only routes

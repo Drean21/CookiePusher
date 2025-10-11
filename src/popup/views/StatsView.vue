@@ -3,10 +3,16 @@
     <div class="sidebar">
       <ul class="domain-list">
         <li
-          v-for="(cookies, domain) in groupedStats"
+          v-if="domains.length === 0"
+          class="no-domains"
+        >
+          没有已同步的域名
+        </li>
+        <li
+          v-for="domain in domains"
           :key="domain"
           :class="{ active: selectedDomain === domain }"
-          @click="selectedDomain = String(domain)"
+          @click="selectedDomain = domain"
         >
           {{ domain }}
         </li>
@@ -52,6 +58,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { sendMessage } from "../../utils/message";
+import type { Cookie } from "../../../types/extension";
 
 interface StatHistory {
   status: "success" | "failure" | "no-change";
@@ -66,53 +73,48 @@ interface CookieStat {
   value?: string;
 }
 
-interface GroupedCookieStat {
-  key: string;
-  name: string;
-  domain: string;
-  path: string;
-  stats: CookieStat;
-  expirationDate?: number;
-  value?: string;
-}
-
 const loading = ref(true);
+const syncList = ref<Cookie[]>([]);
 const rawStats = ref<{ [key: string]: CookieStat }>({});
 const selectedDomain = ref<string | null>(null);
 
-const groupedStats = computed(() => {
-  const groups: { [domain: string]: GroupedCookieStat[] } = {};
-  for (const key in rawStats.value) {
-    const [name, domain, path] = key.split("|");
-    const registrableDomain = getRegistrableDomain(domain);
-    if (!groups[registrableDomain]) {
-      groups[registrableDomain] = [];
-    }
-    groups[registrableDomain].push({
-      key,
-      name,
-      domain,
-      path,
-      stats: rawStats.value[key],
-      expirationDate: rawStats.value[key].expirationDate,
-      value: rawStats.value[key].value,
-    });
+const domains = computed(() => {
+  const domainSet = new Set<string>();
+  for (const cookie of syncList.value) {
+    domainSet.add(getRegistrableDomain(cookie.domain));
   }
-  return groups;
+  return Array.from(domainSet).sort();
 });
 
 const sortedCookies = computed(() => {
-  if (!selectedDomain.value || !groupedStats.value[selectedDomain.value]) {
-    return [];
-  }
-  return groupedStats.value[selectedDomain.value].sort((a, b) => {
+  if (!selectedDomain.value) return [];
+  
+  const cookiesInDomain = syncList.value.filter(
+    (c) => getRegistrableDomain(c.domain) === selectedDomain.value
+  );
+
+  const enrichedCookies = cookiesInDomain.map(cookie => {
+    const key = `${cookie.name}|${cookie.domain}|${cookie.path}`;
+    const stats = rawStats.value[key] || { successCount: 0, failureCount: 0, history: [] };
+    return {
+      key,
+      name: cookie.name,
+      value: rawStats.value[key]?.value || cookie.value,
+      expirationDate: rawStats.value[key]?.expirationDate || cookie.expirationDate,
+      stats,
+    };
+  });
+  
+  return enrichedCookies.sort((a, b) => {
     const totalA = a.stats.successCount + a.stats.failureCount;
     const totalB = b.stats.successCount + b.stats.failureCount;
-    return totalB - totalA; // Sort descending by total activity
+    return totalB - totalA;
   });
 });
 
+
 const formatTime = (timestamp: number | string) => {
+  if (!timestamp) return "N/A";
   if (typeof timestamp === "string") {
     return new Date(timestamp).toLocaleString();
   }
@@ -133,14 +135,8 @@ const getRegistrableDomain = (domain: string): string => {
   if (domain.startsWith(".")) domain = domain.substring(1);
   const parts = domain.split(".");
   if (parts.length <= 2) return domain;
-  // This is a simplified logic, a robust solution would use a public suffix list
   const twoLevelTlds = new Set([
-    "com.cn",
-    "org.cn",
-    "net.cn",
-    "gov.cn",
-    "co.uk",
-    "co.jp",
+    "com.cn", "org.cn", "net.cn", "gov.cn", "co.uk", "co.jp",
   ]);
   const lastTwo = parts.slice(-2).join(".");
   if (twoLevelTlds.has(lastTwo) && parts.length > 2) {
@@ -150,18 +146,23 @@ const getRegistrableDomain = (domain: string): string => {
 };
 
 onMounted(async () => {
+  loading.value = true;
   try {
-    const response = await sendMessage("getKeepAliveStats");
-    if (response.success && response.stats) {
-      rawStats.value = response.stats;
-      // Auto-select the first domain if available
-      const firstDomain = Object.keys(groupedStats.value)[0];
-      if (firstDomain) {
-        selectedDomain.value = firstDomain;
-      }
+    const [{ syncList: storedSyncList = [] }, statsResponse] = await Promise.all([
+      chrome.storage.local.get('syncList'),
+      sendMessage("getKeepAliveStats")
+    ]);
+    
+    syncList.value = storedSyncList;
+    if (statsResponse.success && statsResponse.stats) {
+      rawStats.value = statsResponse.stats;
+    }
+
+    if (domains.value.length > 0) {
+      selectedDomain.value = domains.value[0];
     }
   } catch (e) {
-    console.error("Failed to fetch stats:", e);
+    console.error("Failed to fetch stats page data:", e);
   } finally {
     loading.value = false;
   }
@@ -276,5 +277,15 @@ onMounted(async () => {
 }
 .last-status.no-change {
   color: #757575;
+}
+.no-domains {
+  padding: 16px;
+  text-align: center;
+  color: #999;
+  font-style: italic;
+  cursor: default;
+}
+.no-domains:hover {
+    background-color: transparent;
 }
 </style>

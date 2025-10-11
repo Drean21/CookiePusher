@@ -84,4 +84,6 @@ declare global {
   }
 }
 
-export type Cookie = chrome.cookies.Cookie;
+export interface Cookie extends chrome.cookies.Cookie {
+  isSharable?: boolean;
+}

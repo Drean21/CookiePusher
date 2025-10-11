@@ -1,3 +1,6 @@
+# program
+*.exe
+
 # Data
 *.db
 *.db-wal

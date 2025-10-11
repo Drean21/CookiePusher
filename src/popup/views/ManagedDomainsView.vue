@@ -132,20 +132,29 @@
               </div>
             </div>
             <div class="control-row">
-                <div class="filter-item">
-                  <label>
-                    <input type="checkbox" v-model="showOnlySelected" />
-                    只显示选中
-                  </label>
-                </div>
-                <div class="filter-item">
-                   <label>
-                     <input type="checkbox" v-model="showOnlyInSync" />
-                     只显示已同步
-                   </label>
-                 </div>
+              <div class="filter-item">
+                <label>
+                  <input type="checkbox" v-model="showOnlySelected" />
+                  只显示选中
+                </label>
+              </div>
+              <div class="filter-item">
+                <label>
+                  <input type="checkbox" v-model="showOnlyInSync" />
+                  只显示已同步
+                </label>
+              </div>
             </div>
           </div>
+          <!-- START: Headers for the cookie list -->
+          <div class="cookie-list-header">
+            <span class="cookie-info-header">Cookie 信息</span>
+            <div class="cookie-actions-header">
+              <span title="是否将此Cookie加入同步列表？">同步</span>
+              <span title="是否将此Cookie共享到公共池？">共享</span>
+            </div>
+          </div>
+          <!-- END: Headers for the cookie list -->
           <ul class="cookie-list">
             <li
               v-for="cookie in filteredCookies"
@@ -156,27 +165,64 @@
             >
               <div class="cookie-info">
                 <div class="cookie-name-line">
-                   <strong class="cookie-name">{{ cookie.name }}</strong>
-                   <span class="cookie-domain-badge">{{ cookie.domain }}</span>
+                  <strong class="cookie-name">{{ cookie.name }}</strong>
+                  <span class="cookie-domain-badge">{{ cookie.domain }}</span>
                 </div>
                 <span class="cookie-value-small">{{ cookie.value }}</span>
               </div>
               <div class="cookie-actions">
-                 <div class="copy-action">
-                    <button @click.stop="toggleCopyMenu(getCookieKey(cookie))" class="action-btn" title="复制">
-                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                    </button>
-                    <div v-if="activeCopyMenu === getCookieKey(cookie)" class="copy-menu">
-                        <a @click.prevent="copyCookie(cookie, 'value')">复制值</a>
-                        <a @click.prevent="copyCookie(cookie, 'name-value')">复制 Name=Value</a>
-                        <a @click.prevent="copyCookie(cookie, 'json')">复制 JSON</a>
-                    </div>
+                <div class="copy-action">
+                  <button
+                    @click.stop="toggleCopyMenu(getCookieKey(cookie))"
+                    class="action-btn"
+                    title="复制"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path
+                        d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                      ></path>
+                    </svg>
+                  </button>
+                  <div v-if="activeCopyMenu === getCookieKey(cookie)" class="copy-menu">
+                    <a @click.prevent="copyCookie(cookie, 'value')">复制值</a>
+                    <a @click.prevent="copyCookie(cookie, 'name-value')"
+                      >复制 Name=Value</a
+                    >
+                    <a @click.prevent="copyCookie(cookie, 'json')">复制 JSON</a>
+                  </div>
                 </div>
-                <label class="switch">
+                <label class="switch" title="同步此Cookie">
                   <input
                     type="checkbox"
                     :checked="isCookieInSyncList(cookie)"
                     @change.stop="toggleSync(cookie)"
+                  />
+                  <span class="slider round"></span>
+                </label>
+                <label
+                  class="switch"
+                  :title="
+                    isCookieInSyncList(cookie)
+                      ? '共享此Cookie到公共池'
+                      : '请先同步此Cookie'
+                  "
+                >
+                  <input
+                    type="checkbox"
+                    :checked="isCookieSharable(cookie)"
+                    :disabled="!isCookieInSyncList(cookie)"
+                    @change.stop="toggleShare(cookie)"
                   />
                   <span class="slider round"></span>
                 </label>
@@ -213,7 +259,7 @@ const isAdding = ref(false);
 const managedDomains = ref<{ [key: string]: boolean }>({});
 const selectedDomain = ref<string | null>(null);
 const cookiesForSelectedDomain = ref<Cookie[]>([]);
-const syncListMap = ref<Map<string, Cookie>>(new Map());
+const syncListMap = ref<{ [key: string]: Cookie }>({});
 const newDomainInput = ref("");
 const searchQuery = ref("");
 const selectedCookies = ref(new Set<string>());
@@ -226,7 +272,14 @@ const selectedSubDomain = ref("all");
 const getCookieKey = (cookie: Cookie): string =>
   `${cookie.name}|${cookie.domain}|${cookie.path}`;
 const isCookieInSyncList = (cookie: Cookie): boolean =>
-  syncListMap.value.has(getCookieKey(cookie));
+  !!syncListMap.value[getCookieKey(cookie)];
+
+const isCookieSharable = (cookie: Cookie): boolean => {
+  const key = getCookieKey(cookie);
+  const syncedCookie = syncListMap.value[key];
+  return syncedCookie ? (syncedCookie as any).isSharable || false : false;
+};
+
 const isCookieSelected = (cookie: Cookie): boolean =>
   selectedCookies.value.has(getCookieKey(cookie));
 
@@ -263,7 +316,7 @@ const filteredCookies = computed(() => {
     cookies = cookies.filter((c) => isCookieSelected(c));
   }
   if (showOnlyInSync.value) {
-     cookies = cookies.filter(c => isCookieInSyncList(c));
+    cookies = cookies.filter((c) => isCookieInSyncList(c));
   }
   return cookies;
 });
@@ -286,7 +339,11 @@ const getRegistrableDomain = (domain: string): string => {
 };
 
 const groupAndRenderSyncList = (list: Cookie[]) => {
-  syncListMap.value = new Map(list.map((c) => [getCookieKey(c), c]));
+  const newMap: { [key: string]: Cookie } = {};
+  for (const cookie of list) {
+    newMap[getCookieKey(cookie)] = cookie;
+  }
+  syncListMap.value = newMap;
   const domains = list.reduce((acc, cookie) => {
     acc[getRegistrableDomain(cookie.domain)] = true;
     return acc;
@@ -327,17 +384,69 @@ const selectDomain = async (domain: string) => {
 };
 
 const toggleSync = async (cookie: Cookie) => {
+  const key = getCookieKey(cookie);
+  const isInSync = isCookieInSyncList(cookie);
+  // Optimistically update the UI
+  const newSyncMap = { ...syncListMap.value };
+  if (isInSync) {
+    // If it's in sync, also ensure it's not sharable anymore when removed
+    if (newSyncMap[key]) delete newSyncMap[key];
+  } else {
+    newSyncMap[key] = { ...cookie, isSharable: false }; // Add with default share state
+  }
+  syncListMap.value = newSyncMap;
+  showNotification(
+    `已${isInSync ? "从同步列表移除" : "添加"} ${cookie.name}`,
+    "success",
+    2000
+  );
   try {
-    if (isCookieInSyncList(cookie)) {
-      await sendMessage("removeCookieFromSyncList", { cookie });
-      showNotification(`已从同步列表移除 ${cookie.name}`, "success", 2000);
-    } else {
-      await sendMessage("syncSingleCookie", { cookie });
-      showNotification(`已添加 ${cookie.name} 到同步列表`, "success", 2000);
-    }
+    // Send the entire updated list to the background script for consistency
+    await sendMessage("updateSyncList", { syncList: Object.values(newSyncMap) });
   } catch (e: any) {
     showNotification(`操作失败: ${e.message}`, "error");
+    // Revert UI on failure
+    const revertedMap = { ...syncListMap.value };
+    if (isInSync) {
+       // This part is tricky, as the original cookie might not have had isSharable.
+       // Re-fetching from storage on error is safer.
+       const { syncList: storedSyncList } = await chrome.storage.local.get("syncList");
+       if (storedSyncList) groupAndRenderSyncList(storedSyncList);
+    } else {
+      delete revertedMap[key]; // It was added, so remove it
+      syncListMap.value = revertedMap;
+    }
   }
+};
+
+const toggleShare = (cookie: Cookie) => {
+  if (!isCookieInSyncList(cookie)) {
+    showNotification("请先同步此Cookie才能开启共享", "info");
+    return;
+  }
+  const key = getCookieKey(cookie);
+
+  // Optimistically update the UI
+  const newSyncMap = { ...syncListMap.value };
+  const updatedCookie = { ...newSyncMap[key] };
+  updatedCookie.isSharable = !updatedCookie.isSharable; // Toggle the state
+  newSyncMap[key] = updatedCookie;
+  syncListMap.value = newSyncMap; // Trigger reactivity
+
+  showNotification(
+    `Cookie "${cookie.name}" 的共享状态已${updatedCookie.isSharable ? "开启" : "关闭"}`,
+    "success",
+    2000
+  );
+
+  // Send the entire updated list to the background script
+  sendMessage("updateSyncList", { syncList: Object.values(newSyncMap) })
+    .catch(async (e: any) => {
+      showNotification(`更新共享状态失败: ${e.message}`, "error");
+      // Revert UI on failure by re-fetching from storage
+      const { syncList: storedSyncList } = await chrome.storage.local.get("syncList");
+      if (storedSyncList) groupAndRenderSyncList(storedSyncList);
+    });
 };
 
 const addNewDomain = async () => {
@@ -358,6 +467,9 @@ const addNewDomain = async () => {
     showNotification(`添加域失败: ${e.message}`, "error");
   } finally {
     isAdding.value = false;
+    // Manually refetch to show the new domain in the list
+    const { syncList: updatedSyncList } = await chrome.storage.local.get("syncList");
+    groupAndRenderSyncList(updatedSyncList || []);
   }
 };
 
@@ -380,19 +492,22 @@ const toggleDomainCopyMenu = (domain: string) => {
   activeDomainCopyMenu.value = activeDomainCopyMenu.value === domain ? null : domain;
 };
 
-const copyCookiesForDomain = async (domain: string, type: "selected" | "all" | "synced") => {
+const copyCookiesForDomain = async (
+  domain: string,
+  type: "selected" | "all" | "synced"
+) => {
   activeDomainCopyMenu.value = null;
   let cookiesToCopy: Cookie[] = [];
 
-   if (type === "all") {
-       const response = await sendMessage("getCookiesForDomain", { domain });
-       if (response.success) cookiesToCopy = response.cookies;
-   } else if (type === "selected") {
-       cookiesToCopy = cookiesForSelectedDomain.value.filter((c) => isCookieSelected(c));
-   } else if (type === 'synced') {
-       const allSynced = Array.from(syncListMap.value.values());
-       cookiesToCopy = allSynced.filter(c => getRegistrableDomain(c.domain) === domain);
-   }
+  if (type === "all") {
+    const response = await sendMessage("getCookiesForDomain", { domain });
+    if (response.success) cookiesToCopy = response.cookies;
+  } else if (type === "selected") {
+    cookiesToCopy = cookiesForSelectedDomain.value.filter((c) => isCookieSelected(c));
+  } else if (type === "synced") {
+    const allSynced = Object.values(syncListMap.value);
+    cookiesToCopy = allSynced.filter((c) => getRegistrableDomain(c.domain) === domain);
+  }
 
   if (cookiesToCopy.length > 0) {
     const textToCopy = cookiesToCopy
@@ -408,9 +523,15 @@ const copyCookiesForDomain = async (domain: string, type: "selected" | "all" | "
 const removeDomain = async (domain: string) => {
   if (window.confirm(`确定要从同步列表中移除域名 "${domain}" 吗？`)) {
     try {
-      await sendMessage("removeDomainFromSyncList", { domain });
+      const response = await sendMessage("removeDomainFromSyncList", { domain });
       showNotification(`已移除域名 ${domain}`, "success");
-      if (selectedDomain.value === domain) selectedDomain.value = null;
+      
+      if (selectedDomain.value === domain) {
+          selectedDomain.value = null;
+      }
+      // Use the authoritative list returned from the background script
+      groupAndRenderSyncList(response.syncList || []);
+
     } catch (e: any) {
       showNotification(`移除失败: ${e.message}`, "error");
     }
@@ -420,27 +541,23 @@ const removeDomain = async (domain: string) => {
 const copyCookie = async (cookie: Cookie, format: "value" | "name-value" | "json") => {
   let textToCopy = "";
   switch (format) {
-    case "value": textToCopy = cookie.value; break;
-    case "name-value": textToCopy = `${cookie.name}=${cookie.value}`; break;
-    case "json": textToCopy = JSON.stringify(cookie, null, 2); break;
+    case "value":
+      textToCopy = cookie.value;
+      break;
+    case "name-value":
+      textToCopy = `${cookie.name}=${cookie.value}`;
+      break;
+    case "json":
+      textToCopy = JSON.stringify(cookie, null, 2);
+      break;
   }
   await navigator.clipboard.writeText(textToCopy);
   activeCopyMenu.value = null;
-  showNotification('已复制!', 'success', 1500);
+  showNotification("已复制!", "success", 1500);
 };
 
 const toggleCopyMenu = (cookieKey: string) => {
-    activeCopyMenu.value = activeCopyMenu.value === cookieKey ? null : cookieKey;
-};
-
-
-const handleStorageChange = (
-  changes: { [key: string]: chrome.storage.StorageChange },
-  area: string
-) => {
-  if (area === "local" && changes.syncList) {
-    groupAndRenderSyncList(changes.syncList.newValue || []);
-  }
+  activeCopyMenu.value = activeCopyMenu.value === cookieKey ? null : cookieKey;
 };
 
 onMounted(async () => {
@@ -448,11 +565,11 @@ onMounted(async () => {
   const { syncList: storedSyncList } = await chrome.storage.local.get("syncList");
   if (storedSyncList) groupAndRenderSyncList(storedSyncList);
   loading.value = false;
-  chrome.storage.onChanged.addListener(handleStorageChange);
+  // chrome.storage.onChanged.addListener(handleStorageChange);
 });
 
 onUnmounted(() => {
-  chrome.storage.onChanged.removeListener(handleStorageChange);
+  // chrome.storage.onChanged.removeListener(handleStorageChange);
 });
 </script>
 
@@ -551,7 +668,7 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 .filter-item {
-    font-size: 13px;
+  font-size: 13px;
 }
 .filter-item select {
   border: 1px solid #ccc;
@@ -599,9 +716,9 @@ onUnmounted(() => {
   margin-right: 10px;
 }
 .cookie-name-line {
-   display: flex;
-   align-items: baseline;
-   gap: 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 .cookie-name {
   font-weight: 600;
@@ -609,13 +726,13 @@ onUnmounted(() => {
   color: #333;
 }
 .cookie-domain-badge {
-   font-size: 11px;
-   background-color: #eee;
-   color: #555;
-   padding: 2px 6px;
-   border-radius: 4px;
-   font-family: monospace;
-   white-space: nowrap;
+  font-size: 11px;
+  background-color: #eee;
+  color: #555;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  white-space: nowrap;
 }
 .cookie-value-small {
   font-size: 12px;
@@ -795,5 +912,31 @@ input:checked + .slider:before {
 }
 .slider.round:before {
   border-radius: 50%;
+}
+.cookie-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+.cookie-info-header {
+  flex-grow: 1;
+  margin-right: 10px; /* Match .cookie-info margin */
+}
+.cookie-actions-header {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* Match .cookie-actions gap */
+  flex-shrink: 0;
+  /* The space for the copy button (approx 22px) + gap (12px) */
+  padding-left: 34px;
+}
+.cookie-actions-header span {
+  width: 34px; /* Match .switch width */
+  text-align: center;
 }
 </style>
