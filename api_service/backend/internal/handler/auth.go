@@ -75,6 +75,14 @@ func AdminOnlyMiddleware(next http.Handler) http.Handler {
 }
 
 // AuthTestHandler is a simple handler to confirm that a token is valid.
+// @Summary      Test API Key
+// @Description  A simple endpoint to check if the provided API key in the `x-api-key` header is valid and associated with a user.
+// @Tags         Auth
+// @Produce      json
+// @Success      200  {object}  handler.APIResponse{data=object{user_id=int,role=string}}
+// @Failure      401  {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /auth/test [get]
 func AuthTestHandler(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
 	RespondWithJSON(w, http.StatusOK, "Token is valid", map[string]interface{}{"user_id": user.ID, "role": user.Role})

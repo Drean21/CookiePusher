@@ -34,32 +34,31 @@ func NewRouter(db store.Store, locker *handler.UserLockManager) *chi.Mux {
 		handler.RespondWithJSON(w, http.StatusOK, "Service is healthy", nil)
 	})
 
-	// Authenticated routes group
+	// Authenticated routes group for regular users
 	r.Group(func(r chi.Router) {
 		r.Use(handler.AuthMiddleware(db))
 
-		// User-specific, non-admin routes
 		r.Post("/api/v1/sync", handler.SyncHandler(db, locker))
 		r.Get("/api/v1/auth/test", handler.AuthTestHandler)
 		r.Post("/api/v1/auth/refresh-key", handler.RefreshSelfAPIKeyHandler(db))
 		r.Get("/api/v1/cookies/all", handler.GetAllCookiesHandler(db))
 		r.Get("/api/v1/cookies/{domain}", handler.GetDomainCookiesHandler(db))
 		r.Get("/api/v1/cookies/{domain}/{name}", handler.GetCookieValueHandler(db))
-
-		// Sharing related endpoints
 		r.Put("/api/v1/user/settings", handler.UpdateUserSettingsHandler(db))
-		r.Get("/api/v1/pool/cookies/{domain}", handler.GetSharableCookiesHandler(db))
 	})
 
-	// Admin-only routes
-	r.Group(func(r chi.Router) {
-		r.Use(handler.AuthMiddleware(db))
-		r.Use(handler.AdminOnlyMiddleware)
+	// Admin-only routes group
+	adminRouter := chi.NewRouter()
+	adminRouter.Use(handler.AuthMiddleware(db))
+	adminRouter.Use(handler.AdminOnlyMiddleware)
+	adminRouter.Post("/users", handler.CreateUsersHandler(db))
+	adminRouter.Delete("/users", handler.DeleteUsersHandler(db))
+	adminRouter.Put("/users/keys", handler.AdminRefreshAPIKeysHandler(db))
+	// Correctly place the sharable cookies endpoint under admin protection
+	adminRouter.Get("/pool/cookies/{domain}", handler.GetSharableCookiesHandler(db))
 
-		r.Post("/api/v1/admin/users", handler.CreateUsersHandler(db))
-		r.Delete("/api/v1/admin/users", handler.DeleteUsersHandler(db))
-		r.Put("/api/v1/admin/users/keys", handler.AdminRefreshAPIKeysHandler(db))
-	})
+	// Mount the admin router under the /api/v1/admin prefix
+	r.Mount("/api/v1/admin", adminRouter)
 
 	return r
 }

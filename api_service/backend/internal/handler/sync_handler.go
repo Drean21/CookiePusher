@@ -9,7 +9,7 @@ import (
 
 // SyncHandler handles the main data synchronization endpoint.
 // @Summary      Sync cookies
-// @Description  Receives a list of cookies from the browser extension, persists them using an UPSERT logic, and returns the full updated list of cookies for the user.
+// @Description  Receives a list of cookies from the browser extension. It then performs an atomic "replace" operation: all existing cookies for that user are deleted, and the new list is inserted. Finally, it returns the full updated list of cookies for the user.
 // @Tags         Sync
 // @Accept       json
 // @Produce      json

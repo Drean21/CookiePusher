@@ -10,7 +10,18 @@ import (
 )
 
 // UpdateUserSettingsHandler handles updating a user's sharing settings.
-// PUT /api/v1/user/settings
+// @Summary      Update user settings
+// @Description  Updates settings for the authenticated user, such as enabling or disabling cookie sharing.
+// @Tags         User
+// @Accept       json
+// @Produce      json
+// @Param        body body object{sharing_enabled=bool} true "Settings payload"
+// @Success      200  {object}  handler.APIResponse
+// @Failure      400  {object}  handler.APIResponse
+// @Failure      401  {object}  handler.APIResponse
+// @Failure      500  {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /user/settings [put]
 func UpdateUserSettingsHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := UserFromContext(r.Context())
@@ -37,7 +48,18 @@ func UpdateUserSettingsHandler(db store.Store) http.HandlerFunc {
 }
 
 // GetSharableCookiesHandler handles fetching sharable cookies for a domain.
-// GET /api/v1/pool/cookies/{domain}
+// @Summary      [Admin] Get sharable cookies for a domain
+// @Description  (Admin-only) Retrieves all cookies for a given domain that have been marked as "sharable" by users who have enabled sharing. By default, returns an HTTP header string. Use ?format=json to get structured JSON.
+// @Tags         Admin
+// @Produce      json
+// @Param        domain   path      string  true   "Domain"
+// @Param        format   query     string  false  "Output format"  Enums(json)
+// @Success      200      {object}  handler.APIResponse{data=string}
+// @Failure      401      {object}  handler.APIResponse "Unauthorized"
+// @Failure      403      {object}  handler.APIResponse "Forbidden"
+// @Failure      500      {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /admin/pool/cookies/{domain} [get]
 func GetSharableCookiesHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		domain := chi.URLParam(r, "domain")

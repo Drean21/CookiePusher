@@ -11,6 +11,9 @@ tmp_dir = "tmp"
 cmd = "go build -o ./tmp/main.exe ./cmd/api/main.go"
 # Binary file to run
 bin = "tmp/main.exe"
+# Command to run before building the binary.
+# This is the correct way to ensure swagger docs are generated on every change.
+pre_cmd = ["go run github.com/swaggo/swag/cmd/swag init -g cmd/api/main.go"]
 # Directories to watch for changes
 include_dir = ["cmd", "internal", "docs"]
 # File extensions to watch
@@ -30,8 +33,3 @@ clean_on_exit = true
 
 [screen]
 clear_on_rebuild = true
-
-# Custom build commands
-[cmd]
-# Command to generate swagger docs before building the binary
-pre_build_cmd = ["go run github.com/swaggo/swag/cmd/swag init -g cmd/api/main.go"]

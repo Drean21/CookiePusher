@@ -19,6 +19,8 @@ definitions:
         type: boolean
       id:
         type: integer
+      is_sharable:
+        type: boolean
       last_updated_from_extension_at:
         type: string
       name:
@@ -42,6 +44,8 @@ definitions:
         type: integer
       role:
         type: string
+      sharing_enabled:
+        type: boolean
       updated_at:
         type: string
     type: object
@@ -58,6 +62,52 @@ info:
   title: Cookie Syncer API
   version: "1.0"
 paths:
+  /admin/pool/cookies/{domain}:
+    get:
+      description: (Admin-only) Retrieves all cookies for a given domain that have
+        been marked as "sharable" by users who have enabled sharing. By default, returns
+        an HTTP header string. Use ?format=json to get structured JSON.
+      parameters:
+      - description: Domain
+        in: path
+        name: domain
+        required: true
+        type: string
+      - description: Output format
+        enum:
+        - json
+        in: query
+        name: format
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  type: string
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: '[Admin] Get sharable cookies for a domain'
+      tags:
+      - Admin
   /admin/users:
     delete:
       consumes:
@@ -238,6 +288,36 @@ paths:
       summary: Refresh own API key
       tags:
       - Auth
+  /auth/test:
+    get:
+      description: A simple endpoint to check if the provided API key in the `x-api-key`
+        header is valid and associated with a user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  properties:
+                    role:
+                      type: string
+                    user_id:
+                      type: integer
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Test API Key
+      tags:
+      - Auth
   /cookies/{domain}:
     get:
       description: Retrieves cookies for a specific domain. By default, returns an
@@ -364,9 +444,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: Receives a list of cookies from the browser extension, persists
-        them using an UPSERT logic, and returns the full updated list of cookies for
-        the user.
+      description: 'Receives a list of cookies from the browser extension. It then
+        performs an atomic "replace" operation: all existing cookies for that user
+        are deleted, and the new list is inserted. Finally, it returns the full updated
+        list of cookies for the user.'
       parameters:
       - description: List of cookies to sync
         in: body
@@ -407,6 +488,46 @@ paths:
       summary: Sync cookies
       tags:
       - Sync
+  /user/settings:
+    put:
+      consumes:
+      - application/json
+      description: Updates settings for the authenticated user, such as enabling or
+        disabling cookie sharing.
+      parameters:
+      - description: Settings payload
+        in: body
+        name: body
+        required: true
+        schema:
+          properties:
+            sharing_enabled:
+              type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Update user settings
+      tags:
+      - User
 securityDefinitions:
   ApiKeyAuth:
     in: header

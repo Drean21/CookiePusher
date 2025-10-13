@@ -23,13 +23,81 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/admin/users": {
-            "post": {
+        "/admin/pool/cookies/{domain}": {
+            "get": {
+                "description": "(Admin-only) Retrieves all cookies for a given domain that have been marked as \"sharable\" by users who have enabled sharing. By default, returns an HTTP header string. Use ?format=json to get structured JSON.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "[Admin] Get sharable cookies for a domain",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Domain",
+                        "name": "domain",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "json"
+                        ],
+                        "type": "string",
+                        "description": "Output format",
+                        "name": "format",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    }
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/admin/users": {
+            "post": {
                 "description": "Creates new users with the 'user' role. Only accessible by admins.",
                 "consumes": [
                     "application/json"
@@ -100,14 +168,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/handler.APIResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "Deletes users by their IDs or API keys. Only accessible by admins.",
                 "consumes": [
                     "application/json"
@@ -186,16 +254,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/handler.APIResponse"
                         }
                     }
-                }
-            }
-        },
-        "/admin/users/keys": {
-            "put": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/admin/users/keys": {
+            "put": {
                 "description": "Generates new API keys for a list of user IDs. Only accessible by admins.",
                 "consumes": [
                     "application/json"
@@ -266,16 +334,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/handler.APIResponse"
                         }
                     }
-                }
-            }
-        },
-        "/auth/refresh-key": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/auth/refresh-key": {
+            "post": {
                 "description": "Invalidates the current API key and returns a new one.",
                 "produces": [
                     "application/json"
@@ -320,16 +388,67 @@ const docTemplate = `{
                             "$ref": "#/definitions/handler.APIResponse"
                         }
                     }
-                }
-            }
-        },
-        "/cookies/all": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
+                ]
+            }
+        },
+        "/auth/test": {
+            "get": {
+                "description": "A simple endpoint to check if the provided API key in the ` + "`" + `x-api-key` + "`" + ` header is valid and associated with a user.",
+                "produces": [
+                    "application/json"
                 ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Test API Key",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "properties": {
+                                                "role": {
+                                                    "type": "string"
+                                                },
+                                                "user_id": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/cookies/all": {
+            "get": {
                 "description": "Retrieves all cookies for the authenticated user. By default, groups them by domain and returns them as HTTP header strings. Use ?format=json to get structured JSON.",
                 "produces": [
                     "application/json"
@@ -380,16 +499,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/handler.APIResponse"
                         }
                     }
-                }
-            }
-        },
-        "/cookies/{domain}": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/cookies/{domain}": {
+            "get": {
                 "description": "Retrieves cookies for a specific domain. By default, returns an HTTP header string. Use ?format=json to get structured JSON.",
                 "produces": [
                     "application/json"
@@ -447,16 +566,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/handler.APIResponse"
                         }
                     }
-                }
-            }
-        },
-        "/cookies/{domain}/{name}": {
-            "get": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/cookies/{domain}/{name}": {
+            "get": {
                 "description": "Retrieves the raw value of a specific cookie, returned in the 'data' field.",
                 "produces": [
                     "application/json"
@@ -518,17 +637,17 @@ const docTemplate = `{
                             "$ref": "#/definitions/handler.APIResponse"
                         }
                     }
-                }
-            }
-        },
-        "/sync": {
-            "post": {
+                },
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
-                ],
-                "description": "Receives a list of cookies from the browser extension, persists them using an UPSERT logic, and returns the full updated list of cookies for the user.",
+                ]
+            }
+        },
+        "/sync": {
+            "post": {
+                "description": "Receives a list of cookies from the browser extension. It then performs an atomic \"replace\" operation: all existing cookies for that user are deleted, and the new list is inserted. Finally, it returns the full updated list of cookies for the user.",
                 "consumes": [
                     "application/json"
                 ],
@@ -593,7 +712,74 @@ const docTemplate = `{
                             "$ref": "#/definitions/handler.APIResponse"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/user/settings": {
+            "put": {
+                "description": "Updates settings for the authenticated user, such as enabling or disabling cookie sharing.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "Update user settings",
+                "parameters": [
+                    {
+                        "description": "Settings payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "sharing_enabled": {
+                                    "type": "boolean"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ]
             }
         }
     },
@@ -625,6 +811,9 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
+                },
+                "is_sharable": {
+                    "type": "boolean"
                 },
                 "last_updated_from_extension_at": {
                     "type": "string"
@@ -660,6 +849,9 @@ const docTemplate = `{
                 },
                 "role": {
                     "type": "string"
+                },
+                "sharing_enabled": {
+                    "type": "boolean"
                 },
                 "updated_at": {
                     "type": "string"
