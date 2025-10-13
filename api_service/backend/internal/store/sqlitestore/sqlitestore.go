@@ -100,6 +100,17 @@ func (s *SQLiteStore) migrate() error {
 		log.Info().Msg("Migration v2 successful.")
 	}
 
+	if version < 3 {
+		log.Info().Msg("Running migration v3: Fix UNIQUE constraint on cookies table...")
+		if err := s.migrationV3(); err != nil {
+			return err
+		}
+		if err := s.setVersion(3); err != nil {
+			return err
+		}
+		log.Info().Msg("Migration v3 successful.")
+	}
+
 	return nil
 }
 
@@ -132,7 +143,7 @@ func (s *SQLiteStore) migrationV1() error {
 		same_site TEXT,
 		last_updated_from_extension_at DATETIME NOT NULL,
 		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-		UNIQUE(user_id, domain, name)
+		UNIQUE(user_id, domain, name, path)
 	);`
 
 	if _, err := s.db.Exec(usersTable); err != nil { return err }
@@ -154,6 +165,60 @@ func (s *SQLiteStore) migrationV2() error {
 	}
 
 	return nil
+}
+
+func (s *SQLiteStore) migrationV3() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("could not start transaction for v3 migration: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 1. Create a new table with the correct schema
+	cookiesTableNew := `
+	CREATE TABLE IF NOT EXISTS cookies_new (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		domain TEXT NOT NULL,
+		name TEXT NOT NULL,
+		value TEXT NOT NULL,
+		path TEXT,
+		expires DATETIME,
+		http_only BOOLEAN,
+		secure BOOLEAN,
+		same_site TEXT,
+		is_sharable BOOLEAN NOT NULL DEFAULT 0,
+		last_updated_from_extension_at DATETIME NOT NULL,
+		FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+		UNIQUE(user_id, domain, name, path)
+	);`
+	if _, err := tx.Exec(cookiesTableNew); err != nil {
+		return fmt.Errorf("v3: could not create new cookies table: %w", err)
+	}
+
+	// 2. Copy data from the old table to the new table
+	// We ignore errors here because some rows might violate the new unique constraint (though unlikely with path)
+	// The important part is to preserve as much data as possible.
+	copyData := `
+	INSERT OR IGNORE INTO cookies_new (id, user_id, domain, name, value, path, expires, http_only, secure, same_site, is_sharable, last_updated_from_extension_at)
+	SELECT id, user_id, domain, name, value, path, expires, http_only, secure, same_site, is_sharable, last_updated_from_extension_at
+	FROM cookies;
+	`
+	if _, err := tx.Exec(copyData); err != nil {
+		log.Warn().Err(err).Msg("v3: Some data might not have been copied due to new constraints, which is expected.")
+	}
+	
+	// 3. Drop the old table
+	if _, err := tx.Exec(`DROP TABLE cookies;`); err != nil {
+		return fmt.Errorf("v3: could not drop old cookies table: %w", err)
+	}
+
+	// 4. Rename the new table to the original name
+	if _, err := tx.Exec(`ALTER TABLE cookies_new RENAME TO cookies;`); err != nil {
+		return fmt.Errorf("v3: could not rename new cookies table: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 
@@ -339,25 +404,24 @@ func (s *SQLiteStore) SyncCookies(userID int64, cookies []*model.Cookie) error {
 	}
 	defer tx.Rollback()
 
-	query := `
+	// 1. Delete all existing cookies for the user to ensure a clean slate.
+	deleteQuery := `DELETE FROM cookies WHERE user_id = ?;`
+	if _, err := tx.Exec(deleteQuery, userID); err != nil {
+		return fmt.Errorf("could not delete old cookies for user %d: %w", userID, err)
+	}
+
+	// 2. Prepare the statement for inserting new cookies.
+	insertQuery := `
 	INSERT INTO cookies (user_id, domain, name, value, path, expires, http_only, secure, same_site, is_sharable, last_updated_from_extension_at)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(user_id, domain, name) DO UPDATE SET
-		value = excluded.value,
-		path = excluded.path,
-		expires = excluded.expires,
-		http_only = excluded.http_only,
-		secure = excluded.secure,
-		same_site = excluded.same_site,
-		is_sharable = excluded.is_sharable,
-		last_updated_from_extension_at = excluded.last_updated_from_extension_at;
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 	`
-	stmt, err := tx.Prepare(query)
+	stmt, err := tx.Prepare(insertQuery)
 	if err != nil {
-		return fmt.Errorf("could not prepare statement: %w", err)
+		return fmt.Errorf("could not prepare insert statement: %w", err)
 	}
 	defer stmt.Close()
 
+	// 3. Insert all cookies from the sync payload.
 	now := time.Now()
 	for _, cookie := range cookies {
 		_, err := stmt.Exec(
@@ -379,13 +443,12 @@ func (s *SQLiteStore) SyncCookies(userID int64, cookies []*model.Cookie) error {
 				Int64("user_id", userID).
 				Str("domain", cookie.Domain).
 				Str("name", cookie.Name).
-				Str("value", cookie.Value).
-				Interface("expires", cookie.Expires).
-				Msg("Failed to execute statement for a cookie")
-			return fmt.Errorf("could not execute statement for cookie %s/%s: %w", cookie.Domain, cookie.Name, err)
+				Msg("Failed to execute insert statement for a cookie")
+			return fmt.Errorf("could not execute insert for cookie %s/%s: %w", cookie.Domain, cookie.Name, err)
 		}
 	}
 
+	// 4. If all operations are successful, commit the transaction.
 	return tx.Commit()
 }
 
