@@ -15,7 +15,7 @@ bin = "tmp/main.exe"
 # This is the correct way to ensure swagger docs are generated on every change.
 pre_cmd = ["go run github.com/swaggo/swag/cmd/swag init -g cmd/api/main.go"]
 # Directories to watch for changes
-include_dir = ["cmd", "internal", "docs"]
+include_dir = ["cmd", "internal"]
 # File extensions to watch
 include_ext = ["go", "toml", "json"]
 # Directories to ignore

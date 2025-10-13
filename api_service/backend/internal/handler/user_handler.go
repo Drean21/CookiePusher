@@ -4,13 +4,14 @@ import (
 	"cookie-syncer/api/internal/store"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 )
 
 // CreateUsersHandler handles bulk user creation (Admin only).
 // @Summary      Create one or more users
-// @Description  Creates new users with the 'user' role. Only accessible by admins.
+// @Description  Creates new users. The 'role' field must be either 'admin' or 'user'. The system enforces a singleton admin policy; this endpoint will fail if an admin user already exists and a new one is requested. Only accessible by admins.
 // @Tags         Admin
 // @Accept       json
 // @Produce      json
@@ -18,6 +19,7 @@ import (
 // @Success      201  {object}  handler.APIResponse{data=[]model.User}
 // @Failure      400  {object}  handler.APIResponse
 // @Failure      403  {object}  handler.APIResponse
+// @Failure      409  {object}  handler.APIResponse "Conflict if admin user already exists"
 // @Failure      500  {object}  handler.APIResponse
 // @Security     ApiKeyAuth
 // @Router       /admin/users [post]
@@ -39,10 +41,18 @@ func CreateUsersHandler(db store.Store) http.HandlerFunc {
 			RespondWithError(w, http.StatusBadRequest, "Count must be between 1 and 100")
 			return
 		}
+		if payload.Role != "admin" && payload.Role != "user" {
+			RespondWithError(w, http.StatusBadRequest, "Role must be either 'admin' or 'user'")
+			return
+		}
 
 		users, err := db.CreateUsers(payload.Count, payload.Role)
 		if err != nil {
-			RespondWithError(w, http.StatusInternalServerError, "Could not create users")
+			if strings.Contains(err.Error(), "already exists") {
+				RespondWithError(w, http.StatusConflict, "An admin user already exists.")
+			} else {
+				RespondWithError(w, http.StatusInternalServerError, "Could not create users")
+			}
 			return
 		}
 		RespondWithJSON(w, http.StatusCreated, "Users created successfully", users)

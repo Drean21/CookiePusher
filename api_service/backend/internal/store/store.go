@@ -8,6 +8,7 @@ type Store interface {
 	CreateUser(apiKey, role string) (*model.User, error)
 	GetUserByAPIKey(apiKey string) (*model.User, error)
 	GetUserByID(userID int64) (*model.User, error)
+	AdminUserExists() (bool, error)
 	// Bulk operations for admins
 	CreateUsers(count int, role string) ([]*model.User, error)
 	DeleteUsersByIDs(userIDs []int64) (int64, error)

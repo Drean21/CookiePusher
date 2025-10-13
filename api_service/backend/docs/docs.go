@@ -98,7 +98,7 @@ const docTemplate = `{
         },
         "/admin/users": {
             "post": {
-                "description": "Creates new users with the 'user' role. Only accessible by admins.",
+                "description": "Creates new users. The 'role' field must be either 'admin' or 'user'. The system enforces a singleton admin policy; this endpoint will fail if an admin user already exists and a new one is requested. Only accessible by admins.",
                 "consumes": [
                     "application/json"
                 ],
@@ -158,6 +158,12 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict if admin user already exists",
                         "schema": {
                             "$ref": "#/definitions/handler.APIResponse"
                         }

@@ -252,8 +252,29 @@ func (s *SQLiteStore) GetUserByID(userID int64) (*model.User, error) {
 	return &user, nil
 }
 
+func (s *SQLiteStore) AdminUserExists() (bool, error) {
+	query := `SELECT COUNT(*) FROM users WHERE role = 'admin'`
+	var count int
+	err := s.db.QueryRow(query).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("could not query admin user count: %w", err)
+	}
+	return count > 0, nil
+}
+
+
 // CreateUser is a helper for creating a single user, used for initialization.
 func (s *SQLiteStore) CreateUser(apiKey, role string) (*model.User, error) {
+	if role == "admin" {
+		exists, err := s.AdminUserExists()
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, fmt.Errorf("an admin user already exists")
+		}
+	}
+
 	query := `INSERT INTO users (api_key, role, sharing_enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
 	now := time.Now()
 	// New users have sharing disabled by default.
@@ -269,6 +290,19 @@ func (s *SQLiteStore) CreateUser(apiKey, role string) (*model.User, error) {
 }
 
 func (s *SQLiteStore) CreateUsers(count int, role string) ([]*model.User, error) {
+	if role == "admin" {
+		exists, err := s.AdminUserExists()
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, fmt.Errorf("an admin user already exists")
+		}
+		if count > 1 {
+			return nil, fmt.Errorf("cannot create more than one admin user at a time")
+		}
+	}
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("could not start transaction: %w", err)
