@@ -11,15 +11,24 @@ const SYNC_LIST_STORAGE_KEY = 'syncList';
 const STATS_STORAGE_KEY = 'keepAliveStats';
 const MAX_LOGS = 100;
 
+// =================================================================
+// Enhanced Statistics Interfaces
+// =================================================================
+interface StatHistory {
+    status: 'success' | 'failure' | 'no-change';
+    timestamp: string;
+    changeSource: 'keep-alive' | 'on-change';
+    intervalSeconds?: number;
+    error?: string; // Add error message field
+}
+
 interface KeepAliveStat {
     successCount: number;
     failureCount: number;
-    history: {
-        status: 'success' | 'failure' | 'no-change';
-        timestamp: string;
-    }[];
+    history: StatHistory[];
     expirationDate?: number;
     value?: string;
+    lastChangeTimestamp?: string;
 }
 
 async function addLog(message: string, type: 'info' | 'success' | 'error' = 'info') {
@@ -75,6 +84,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             await triggerFullSync();
             return { success: true };
         },
+        exportAllData: handleExportAllData,
+        importAllData: handleImportAllData,
     };
 
     if (actionMap[action]) {
@@ -160,9 +171,9 @@ function getRegistrableDomain(domain: string): string {
 }
 
 async function handleSyncCookies(payload: { cookie?: Cookie, cookies?: Cookie[] }) {
-    if (!payload || (!payload.cookie && !payload.cookies)) throw new Error('无效的同步请求负载。');
+    if (!payload || (!payload.cookie && !payload.cookies)) throw new Error('无效的推送请求负载。');
     const newCookies = payload.cookies || (payload.cookie ? [payload.cookie] : []);
-    if (newCookies.length === 0) return { message: "没有需要同步的Cookie。" };
+    if (newCookies.length === 0) return { message: "没有需要推送的Cookie。" };
     
     const { [SYNC_LIST_STORAGE_KEY]: currentSyncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
     const syncMap = new Map(currentSyncList.map(c => [getCookieKey(c), c]));
@@ -182,7 +193,7 @@ async function handleSyncCookies(payload: { cookie?: Cookie, cookies?: Cookie[] 
     
     await triggerFullSync(); // Trigger sync after local update
     
-    const logMessage = `同步列表更新: 新增 ${addedCount}, 总计 ${updatedSyncList.length}`;
+    const logMessage = `推送列表更新: 新增 ${addedCount}, 总计 ${updatedSyncList.length}`;
     addLog(logMessage, 'success');
     return { added: addedCount, total: updatedSyncList.length, message: logMessage };
 }
@@ -202,7 +213,7 @@ async function handleRemoveCookieFromSync(payload: { cookie: Cookie }) {
     await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedSyncList });
     await triggerFullSync(); // Trigger sync after local update
 
-    const logMessage = `从同步列表移除: ${cookieToRemove.name}.`;
+    const logMessage = `从推送列表移除: ${cookieToRemove.name}.`;
     addLog(logMessage, 'info');
     return { removed: true, total: updatedSyncList.length, message: logMessage };
 }
@@ -216,7 +227,7 @@ async function handleRemoveDomainFromSync(payload: { domain: string }) {
     await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedSyncList });
     await triggerFullSync(); // Trigger sync after local update
 
-    const logMessage = `从同步列表移除域名: ${domainToRemove}.`;
+    const logMessage = `从推送列表移除域名: ${domainToRemove}.`;
     addLog(logMessage, 'info');
     return { removed: true, total: updatedSyncList.length, message: logMessage, syncList: updatedSyncList };
 }
@@ -273,7 +284,7 @@ async function triggerFullSync() {
         const { [SYNC_LIST_STORAGE_KEY]: localSyncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
 
         if (localSyncList.length === 0) {
-            addLog("同步列表为空，跳过云端同步。", 'info');
+            addLog("推送列表为空，跳过云端推送。", 'info');
             return;
         }
 
@@ -294,25 +305,25 @@ async function triggerFullSync() {
         const responseData = await response.json();
 
         if (responseData.code !== 200 || !Array.isArray(responseData.data)) {
-            throw new Error(`同步响应格式错误: ${JSON.stringify(responseData)}`);
+            throw new Error(`推送响应格式错误: ${JSON.stringify(responseData)}`);
         }
         
-        addLog(`云端同步成功。云端现在有 ${responseData.data.length} 个Cookie。`, 'success');
+        addLog(`云端推送成功。云端现在有 ${responseData.data.length} 个Cookie。`, 'success');
         
         // The local storage is the source of truth, so we no longer overwrite it with the server's response.
         // This effectively changes the behavior from "sync" to "push".
         // await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: responseData.data });
     } catch (e: any) {
-        addLog(`云端同步失败: ${e.message}`, 'error');
+        addLog(`云端推送失败: ${e.message}`, 'error');
         // We throw the error so the original caller can catch it if needed.
         throw e;
     }
 }
 
 async function handleManualSync() {
-    await addLog('手动同步开始...', 'info');
+    await addLog('手动推送开始...', 'info');
     await triggerFullSync();
-    return { message: "手动同步已触发。" };
+    return { message: "手动推送已触发。" };
 }
 
 let monitoredCookies = new Set<string>();
@@ -332,15 +343,20 @@ chrome.cookies.onChanged.addListener(async (changeInfo) => {
             
             const updatedList = syncList.map((c: Cookie) => getCookieKey(c) === key ? { ...c, ...changeInfo.cookie } : c);
             
-            // This case should not happen if the cookie is monitored, but as a safeguard:
             if (!updatedList.some(c => getCookieKey(c) === key)) {
                 updatedList.push(changeInfo.cookie);
             }
 
             await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedList });
-            await triggerFullSync(); // Centralized sync call
+            
+            // The cookie has been updated, now let's update its stats
+            await updateCookieStat(key, 'success', 'on-change');
+
+            await triggerFullSync();
         } catch (e: any) {
-            // Error is already logged in triggerFullSync
+            const errorMessage = e.message || '未知错误';
+            addLog(`处理Cookie变更时出错: ${errorMessage}`, 'error');
+            await updateCookieStat(key, 'failure', 'on-change', errorMessage);
         }
     }
 });
@@ -442,7 +458,7 @@ async function handleKeepAlive() {
     
     const { [SYNC_LIST_STORAGE_KEY]: syncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
     if (syncList.length === 0) {
-        await addLog('同步列表为空，跳过保活任务。', 'info');
+        await addLog('推送列表为空，跳过保活任务。', 'info');
         return;
     }
     
@@ -481,34 +497,31 @@ async function handleKeepAlivePostTasks() {
         return;
     }
     const { preSnapshot, syncList } = keepAliveTaskData;
-    const { [STATS_STORAGE_KEY]: stats = {} } = await chrome.storage.local.get(STATS_STORAGE_KEY);
-    const timestamp = new Date().toISOString();
-
+    
     await addLog('静默访问完成，开始对比Cookie快照并更新统计数据。', 'info');
 
     for (const oldCookieKey of preSnapshot.keys()) {
         const cookieInfo = syncList.find(c => getCookieKey(c) === oldCookieKey);
         if (!cookieInfo) continue;
         
-        const statKey = getCookieKey(cookieInfo);
-        if (!stats[statKey]) {
-            stats[statKey] = { successCount: 0, failureCount: 0, history: [] };
-        }
         let currentStatus: 'success' | 'failure' | 'no-change' = 'no-change';
+        let errorMessage: string | undefined;
 
         try {
             const newCookie = await chrome.cookies.get({ url: `https://${cookieInfo.domain.replace(/^\./, '')}/`, name: cookieInfo.name });
             const oldSnapshot = preSnapshot.get(oldCookieKey)!;
 
             if (!newCookie) {
-                await addLog(`[保活警告] Cookie '${cookieInfo.name}' 在 ${cookieInfo.domain} 上已失效或被移除。`, 'error');
-                stats[statKey].failureCount++;
+                errorMessage = `Cookie '${cookieInfo.name}' 在 ${cookieInfo.domain} 上已失效或被移除。`;
+                await addLog(`[保活警告] ${errorMessage}`, 'error');
                 currentStatus = 'failure';
             } else {
-                if (newCookie.expirationDate && oldSnapshot.expirationDate && newCookie.expirationDate > oldSnapshot.expirationDate) {
-                    stats[statKey].successCount++;
+                const expirationChanged = newCookie.expirationDate && oldSnapshot.expirationDate && newCookie.expirationDate > oldSnapshot.expirationDate;
+                const valueChanged = newCookie.value !== oldSnapshot.value;
+
+                if (expirationChanged || valueChanged) {
                     currentStatus = 'success';
-                    if (newCookie.value !== oldSnapshot.value) {
+                    if (valueChanged) {
                         await addLog(`[保活更新] Cookie '${newCookie.name}' 的值已更新，有效期已延长。`, 'success');
                     } else {
                         await addLog(`[保活成功] Cookie '${newCookie.name}' 的有效期已延长。`, 'success');
@@ -516,18 +529,15 @@ async function handleKeepAlivePostTasks() {
                 }
             }
         } catch (e: any) {
-            await addLog(`[快照对比警告] 对比Cookie '${cookieInfo.name}' for '${cookieInfo.domain}' 失败: ${e.message}`, 'error');
-            stats[statKey].failureCount++;
+            errorMessage = e.message || '未知错误';
+            await addLog(`[快照对比警告] 对比Cookie '${cookieInfo.name}' for '${cookieInfo.domain}' 失败: ${errorMessage}`, 'error');
             currentStatus = 'failure';
         }
         
-        stats[statKey].history.unshift({ status: currentStatus, timestamp });
-        if (stats[statKey].history.length > 20) { // Limit history size
-            stats[statKey].history.length = 20;
+        if (currentStatus !== 'no-change') {
+            await updateCookieStat(oldCookieKey, currentStatus, 'keep-alive', errorMessage);
         }
     }
-
-    await chrome.storage.local.set({ [STATS_STORAGE_KEY]: stats });
 
     keepAliveTaskData = null;
     await addLog('保活任务与日志记录全部完成。', 'info');
@@ -549,7 +559,7 @@ async function handleGetKeepAliveStats() {
             // Ignore if cookie not found
         }
     }
-    return stats;
+    return { stats };
 }
 
 function transformCookieForAPI(cookie: Cookie): object {
@@ -565,6 +575,97 @@ function transformCookieForAPI(cookie: Cookie): object {
         expires: cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toISOString() : null,
     };
 }
+
+// =================================================================
+// Centralized Statistics Update Function
+// =================================================================
+async function updateCookieStat(
+    statKey: string,
+    status: 'success' | 'failure',
+    changeSource: 'keep-alive' | 'on-change',
+    error?: string
+) {
+    try {
+        const { [STATS_STORAGE_KEY]: stats = {} } = await chrome.storage.local.get(STATS_STORAGE_KEY);
+        const timestamp = new Date().toISOString();
+
+        if (!stats[statKey]) {
+            stats[statKey] = { successCount: 0, failureCount: 0, history: [] };
+        }
+        const stat = stats[statKey];
+
+        if (status === 'success') {
+            stat.successCount++;
+        } else {
+            stat.failureCount++;
+        }
+
+        let intervalSeconds: number | undefined;
+        if (stat.lastChangeTimestamp) {
+            const lastTime = new Date(stat.lastChangeTimestamp).getTime();
+            const now = new Date(timestamp).getTime();
+            intervalSeconds = Math.round((now - lastTime) / 1000);
+        }
+        stat.lastChangeTimestamp = timestamp;
+
+        const historyEntry: StatHistory = { status, timestamp, changeSource, intervalSeconds };
+        if (status === 'failure' && error) {
+            historyEntry.error = error;
+        }
+
+        stat.history.unshift(historyEntry);
+        if (stat.history.length > 20) {
+            stat.history.length = 20;
+        }
+
+        await chrome.storage.local.set({ [STATS_STORAGE_KEY]: stats });
+    } catch (e: any) {
+        await addLog(`更新统计数据失败 for ${statKey}: ${e.message}`, 'error');
+    }
+}
+
+
+// =================================================================
+// Data Backup & Restore Functions
+// =================================================================
+async function handleExportAllData() {
+    const keysToExport = [
+        LOGS_STORAGE_KEY,
+        SYNC_LIST_STORAGE_KEY,
+        STATS_STORAGE_KEY,
+        'syncSettings'
+    ];
+    const data = await chrome.storage.local.get(keysToExport);
+    return { data };
+}
+
+async function handleImportAllData(payload: { data: any }) {
+    if (!payload || typeof payload.data !== 'object' || payload.data === null) {
+        throw new Error("导入的数据格式无效。");
+    }
+    const { data } = payload;
+    
+    // Basic validation
+    const requiredKeys = [SYNC_LIST_STORAGE_KEY, 'syncSettings'];
+    for (const key of requiredKeys) {
+        if (!(key in data)) {
+            throw new Error(`导入数据缺少关键字段: ${key}`);
+        }
+    }
+
+    // Clear existing data and set new data
+    await chrome.storage.local.clear();
+    await chrome.storage.local.set(data);
+    addLog('数据已从备份文件成功导入。', 'success');
+
+    // Trigger necessary re-initializations after import
+    await refreshMonitoredCookies();
+    await setupAlarms();
+    await performDataIntegrityCheck();
+
+    return { success: true };
+}
+
 
 // Initial load
 refreshMonitoredCookies();

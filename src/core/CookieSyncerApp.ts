@@ -75,7 +75,7 @@ class ModernDomainManager {
     }
 }
 
-// 现代化同步管理器类
+// 现代化推送管理器类
 class ModernSyncManager {
     private domainManager: ModernDomainManager;
 
@@ -117,7 +117,7 @@ class ModernSyncManager {
         return {
             success: true,
             results,
-            summary: `${results.filter(r => r.success).length}/${results.length} 个域名同步成功`
+            summary: `${results.filter(r => r.success).length}/${results.length} 个域名推送成功`
         };
     }
 
@@ -127,7 +127,7 @@ class ModernSyncManager {
             throw new Error('域名未配置或已禁用');
         }
 
-        // 更新状态为同步中
+        // 更新状态为推送中
         await this.domainManager.updateDomain(domain, { lastSyncStatus: 'syncing' });
 
         // 执行续期策略

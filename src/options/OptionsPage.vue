@@ -5,7 +5,7 @@
     </header>
 
     <div class="settings-section">
-      <h2>同步设置</h2>
+      <h2>推送设置</h2>
       
       <div class="setting-item">
         <label class="setting-label">
@@ -14,13 +14,13 @@
             v-model="settings.autoSync" 
             @change="saveSettings"
           />
-          自动同步Cookie
+          自动推送Cookie
         </label>
-        <span class="setting-description">启用后，插件会自动同步已配置域名的Cookie</span>
+        <span class="setting-description">启用后，插件会自动推送已配置域名的Cookie</span>
       </div>
 
       <div class="setting-item">
-        <label class="setting-label">同步间隔（分钟）</label>
+        <label class="setting-label">推送间隔（分钟）</label>
         <input 
           type="number" 
           v-model="settings.syncInterval" 
@@ -29,7 +29,7 @@
           @change="saveSettings"
           class="setting-input"
         />
-        <span class="setting-description">设置Cookie同步的时间间隔</span>
+        <span class="setting-description">设置Cookie推送的时间间隔</span>
       </div>
 
       <div class="setting-item">
@@ -103,8 +103,8 @@
       
       <div class="about-info">
         <p><strong>版本：</strong> {{ version }}</p>
-        <p><strong>最后同步：</strong> {{ formatLastSync(settings.lastSync) }}</p>
-        <p><strong>同步域名数量：</strong> {{ settings.domains.length }}</p>
+        <p><strong>最后推送：</strong> {{ formatLastSync(settings.lastSync) }}</p>
+        <p><strong>推送域名数量：</strong> {{ settings.domains.length }}</p>
       </div>
     </div>
 
@@ -132,7 +132,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 
 interface Settings {
   autoSync: boolean
@@ -269,7 +269,7 @@ const clearData = async () => {
 }
 
 const formatLastSync = (timestamp?: number) => {
-  if (!timestamp) return '从未同步'
+  if (!timestamp) return '从未推送'
   return new Date(timestamp).toLocaleString('zh-CN')
 }
 

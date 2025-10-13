@@ -18,28 +18,28 @@ const ROUTES: Record<string, RouteConfig> = {
     path: '/welcome/index.html',
     name: 'welcome',
     title: 'Cookie Syncer - 欢迎',
-    description: '跨站点、跨设备的 Cookie/TOKEN 自动续期与同步助手',
+    description: '跨站点、跨设备的 Cookie/TOKEN 自动续期与推送助手',
     icon: '🎯'
   },
   POPUP: {
     path: '/app/index.html#/',
     name: 'popup',
     title: 'Cookie Syncer',
-    description: '快速管理 Cookie 同步',
+    description: '快速管理 Cookie 推送',
     icon: '🍪'
   },
   OPTIONS: {
     path: '/app/index.html#/options',
     name: 'options',
     title: 'Cookie Syncer - 设置',
-    description: '配置域名和同步策略',
+    description: '配置域名和推送策略',
     icon: '⚙️'
   },
   BACKGROUND: {
     path: '/background/index.js',
     name: 'background',
     title: 'Cookie Syncer - 后台服务',
-    description: '后台同步服务',
+    description: '后台推送服务',
     isExternal: true
   }
 } as const;

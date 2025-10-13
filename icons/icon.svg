@@ -29,7 +29,7 @@
   <!-- 微笑嘴巴 -->
   <path d="M 50 70 Q 64 80 78 70" stroke="white" stroke-width="2" fill="none"/>
 
-  <!-- 同步箭头 -->
+  <!-- 推送箭头 -->
   <g transform="translate(95, 25) scale(0.8)">
     <!-- 圆形箭头 -->
     <path d="M 15 0 A 15 15 0 0 1 15 30" stroke="white" stroke-width="2" fill="none"/>

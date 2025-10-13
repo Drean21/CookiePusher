@@ -2,12 +2,7 @@
   <div class="stats-view">
     <div class="sidebar">
       <ul class="domain-list">
-        <li
-          v-if="domains.length === 0"
-          class="no-domains"
-        >
-          没有已同步的域名
-        </li>
+        <li v-if="domains.length === 0" class="no-domains">没有已推送的域名</li>
         <li
           v-for="domain in domains"
           :key="domain"
@@ -40,13 +35,27 @@
                   cookie.expirationDate ? formatTime(cookie.expirationDate) : "Session"
                 }}</span>
               </div>
-              <div class="detail-row" v-if="cookie.stats.history.length > 0">
-                <span>上次续期:</span>
-                <span :class="['last-status', cookie.stats.history[0].status]"
-                  >{{ formatStatus(cookie.stats.history[0].status) }} @
-                  {{ formatTime(cookie.stats.history[0].timestamp) }}</span
-                >
-              </div>
+              <template v-if="cookie.stats.history && cookie.stats.history.length > 0">
+                <div class="detail-row">
+                  <span>上次续期:</span>
+                  <span :class="['last-status', cookie.stats.history[0].status]">
+                    {{ formatStatus(cookie.stats.history[0].status) }} @
+                    {{ formatTime(cookie.stats.history[0].timestamp) }}
+                  </span>
+                </div>
+                <div class="detail-row">
+                  <span>续期来源:</span>
+                  <span>{{ formatChangeSource(cookie.stats.history[0].changeSource) }}</span>
+                </div>
+                <div class="detail-row" v-if="cookie.stats.history[0].intervalSeconds !== undefined">
+                  <span>距上次:</span>
+                  <span>{{ formatInterval(cookie.stats.history[0].intervalSeconds) }}</span>
+                </div>
+                <div class="detail-row error-reason" v-if="cookie.stats.history[0].status === 'failure' && cookie.stats.history[0].error">
+                  <span>失败原因:</span>
+                  <span :title="cookie.stats.history[0].error">{{ cookie.stats.history[0].error }}</span>
+                </div>
+              </template>
             </div>
           </li>
         </ul>
@@ -57,12 +66,15 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { sendMessage } from "../../utils/message";
 import type { Cookie } from "../../../types/extension";
+import { sendMessage } from "../../utils/message";
 
 interface StatHistory {
   status: "success" | "failure" | "no-change";
   timestamp: string;
+  changeSource: 'keep-alive' | 'on-change';
+  intervalSeconds?: number;
+  error?: string;
 }
 
 interface CookieStat {
@@ -88,14 +100,18 @@ const domains = computed(() => {
 
 const sortedCookies = computed(() => {
   if (!selectedDomain.value) return [];
-  
+
   const cookiesInDomain = syncList.value.filter(
     (c) => getRegistrableDomain(c.domain) === selectedDomain.value
   );
 
-  const enrichedCookies = cookiesInDomain.map(cookie => {
+  const enrichedCookies = cookiesInDomain.map((cookie) => {
     const key = `${cookie.name}|${cookie.domain}|${cookie.path}`;
-    const stats = rawStats.value[key] || { successCount: 0, failureCount: 0, history: [] };
+    const stats = rawStats.value[key] || {
+      successCount: 0,
+      failureCount: 0,
+      history: [],
+    };
     return {
       key,
       name: cookie.name,
@@ -104,14 +120,13 @@ const sortedCookies = computed(() => {
       stats,
     };
   });
-  
+
   return enrichedCookies.sort((a, b) => {
     const totalA = a.stats.successCount + a.stats.failureCount;
     const totalB = b.stats.successCount + b.stats.failureCount;
     return totalB - totalA;
   });
 });
-
 
 const formatTime = (timestamp: number | string) => {
   if (!timestamp) return "N/A";
@@ -120,6 +135,7 @@ const formatTime = (timestamp: number | string) => {
   }
   return new Date(timestamp * 1000).toLocaleString();
 };
+
 const formatStatus = (status: "success" | "failure" | "no-change") => {
   switch (status) {
     case "success":
@@ -131,12 +147,36 @@ const formatStatus = (status: "success" | "failure" | "no-change") => {
   }
 };
 
+const formatChangeSource = (source: 'keep-alive' | 'on-change') => {
+  switch (source) {
+    case 'keep-alive':
+      return '后台保活';
+    case 'on-change':
+      return '监听变更';
+    default:
+      return '未知';
+  }
+};
+
+const formatInterval = (seconds: number | undefined) => {
+  if (seconds === undefined) return 'N/A';
+  if (seconds < 60) return `${seconds}秒`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}分${remainingSeconds}秒`;
+};
+
 const getRegistrableDomain = (domain: string): string => {
   if (domain.startsWith(".")) domain = domain.substring(1);
   const parts = domain.split(".");
   if (parts.length <= 2) return domain;
   const twoLevelTlds = new Set([
-    "com.cn", "org.cn", "net.cn", "gov.cn", "co.uk", "co.jp",
+    "com.cn",
+    "org.cn",
+    "net.cn",
+    "gov.cn",
+    "co.uk",
+    "co.jp",
   ]);
   const lastTwo = parts.slice(-2).join(".");
   if (twoLevelTlds.has(lastTwo) && parts.length > 2) {
@@ -149,10 +189,10 @@ onMounted(async () => {
   loading.value = true;
   try {
     const [{ syncList: storedSyncList = [] }, statsResponse] = await Promise.all([
-      chrome.storage.local.get('syncList'),
-      sendMessage("getKeepAliveStats")
+      chrome.storage.local.get("syncList"),
+      sendMessage("getKeepAliveStats"),
     ]);
-    
+
     syncList.value = storedSyncList;
     if (statsResponse.success && statsResponse.stats) {
       rawStats.value = statsResponse.stats;
@@ -263,6 +303,13 @@ onMounted(async () => {
   font-size: 13px;
   color: #555;
 }
+.error-reason span:last-child {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 200px;
+  cursor: help;
+}
 .total-count {
   font-weight: bold;
 }
@@ -286,6 +333,6 @@ onMounted(async () => {
   cursor: default;
 }
 .no-domains:hover {
-    background-color: transparent;
+  background-color: transparent;
 }
 </style>

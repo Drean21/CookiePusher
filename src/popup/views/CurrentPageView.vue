@@ -60,7 +60,7 @@
               <button
                 @click.stop="syncAllCookies(domain)"
                 class="action-btn"
-                title="将该域下的所有Cookie项全都加入同步序列"
+                title="将该域下的所有Cookie项全都加入推送序列"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -114,7 +114,7 @@
                 <button
                   @click="syncCookie(cookie)"
                   class="action-btn"
-                  title="加入同步列表"
+                  title="加入推送列表"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -183,12 +183,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, inject } from "vue";
+import { computed, inject, onMounted, ref } from "vue";
 import type { Cookie } from "../../../types/extension.d";
 import { sendMessage } from "../../utils/message";
 
-type ShowNotification = (message: string, type?: 'success' | 'error', duration?: number) => void;
-const showNotification = inject<ShowNotification>('showNotification', () => {});
+type ShowNotification = (
+  message: string,
+  type?: "success" | "error",
+  duration?: number
+) => void;
+const showNotification = inject<ShowNotification>("showNotification", () => {});
 
 interface GroupedCookies {
   [domain: string]: Cookie[];
@@ -250,11 +254,11 @@ async function copyCookie(cookie: Cookie, format: "value" | "name-value" | "json
 async function syncCookie(cookie: Cookie) {
   try {
     const response = await sendMessage("syncSingleCookie", { cookie });
-    if(response.success){
-        showNotification(`已添加 ${cookie.name}`, 'success');
+    if (response.success) {
+      showNotification(`已添加 ${cookie.name}`, "success");
     }
   } catch (e: any) {
-    showNotification(`添加失败: ${e.message}`, 'error');
+    showNotification(`添加失败: ${e.message}`, "error");
   }
 }
 
@@ -262,12 +266,17 @@ async function syncAllCookies(domain: string) {
   const cookiesToSync = groupedCookies.value[domain];
   if (cookiesToSync?.length > 0) {
     try {
-        const response = await sendMessage("syncAllCookiesForDomain", { cookies: cookiesToSync });
-        if(response.success){
-            showNotification(`已添加 ${domain} 下的 ${cookiesToSync.length} 个Cookie`, 'success');
-        }
+      const response = await sendMessage("syncAllCookiesForDomain", {
+        cookies: cookiesToSync,
+      });
+      if (response.success) {
+        showNotification(
+          `已添加 ${domain} 下的 ${cookiesToSync.length} 个Cookie`,
+          "success"
+        );
+      }
     } catch (e: any) {
-        showNotification(`添加失败: ${e.message}`, 'error');
+      showNotification(`添加失败: ${e.message}`, "error");
     }
   }
 }

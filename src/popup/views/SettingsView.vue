@@ -14,7 +14,7 @@
       <div v-if="activeSubView === 'main'">
         <ul class="settings-list">
           <li @click="activeSubView = 'sync'">
-            <span>云端同步</span>
+            <span>云端推送</span>
             <span class="arrow">></span>
           </li>
           <li @click="activeSubView = 'keep-alive'">
@@ -25,7 +25,24 @@
             <span>操作日志</span>
             <span class="arrow">></span>
           </li>
+          <li @click="activeSubView = 'data'">
+            <span>数据管理</span>
+            <span class="arrow">></span>
+          </li>
         </ul>
+      </div>
+
+      <div v-if="activeSubView === 'data'" class="sub-view">
+        <div class="setting-category">
+          <h3>备份与恢复</h3>
+          <p class="tip">
+            将您的所有设置、推送列表和统计数据导出为JSON文件进行备份，或从备份文件中恢复。
+          </p>
+          <div class="setting-actions">
+            <button @click="exportData" class="action-btn">导出数据</button>
+            <button @click="importData" class="action-btn primary">导入数据</button>
+          </div>
+        </div>
       </div>
 
       <div v-if="activeSubView === 'sync'" class="sub-view">
@@ -61,7 +78,7 @@
           <h3>手动操作</h3>
           <div class="setting-actions">
             <button @click="manualSync" :disabled="isSyncing" class="action-btn">
-              <span v-if="!isSyncing">立即同步</span>
+              <span v-if="!isSyncing">立即推送</span>
               <span v-else class="spinner-small"></span>
             </button>
           </div>
@@ -70,18 +87,15 @@
 
       <div v-if="activeSubView === 'keep-alive'" class="sub-view">
         <div class="setting-item">
-          <label for="keep-alive-frequency">保活任务频率</label>
-          <select
+          <label for="keep-alive-frequency">保活任务频率 (分钟)</label>
+          <input
             id="keep-alive-frequency"
+            type="number"
             v-model.number="syncSettings.keepAliveFrequency"
-          >
-            <option :value="1">每分钟 (仅用于测试)</option>
-            <option :value="60">每小时</option>
-            <option :value="180">每3小时</option>
-            <option :value="720">每12小时</option>
-            <option :value="1440">每天</option>
-          </select>
-          <p class="tip">设置后台静默访问网站以刷新Cookie有效期的频率。</p>
+            min="1"
+            placeholder="输入分钟数，例如 60"
+          />
+          <p class="tip">设置后台静默访问网站以刷新Cookie有效期的频率。最小值为 1 分钟。</p>
         </div>
         <div class="setting-actions">
           <button @click="saveSettings" :disabled="isSaving" class="action-btn primary">
@@ -109,7 +123,7 @@ type ShowNotification = (
 ) => void;
 const showNotification = inject<ShowNotification>("showNotification", () => {});
 
-type SubView = "main" | "sync" | "logs" | "keep-alive";
+type SubView = "main" | "sync" | "logs" | "keep-alive" | "data";
 
 const activeSubView = ref<SubView>("main");
 
@@ -118,11 +132,13 @@ const headerTitle = computed(() => {
     case "main":
       return "设置";
     case "sync":
-      return "云端同步";
+      return "云端推送";
     case "logs":
       return "操作日志";
     case "keep-alive":
       return "Cookie保活";
+    case "data":
+      return "数据管理";
     default:
       return "设置";
   }
@@ -182,18 +198,70 @@ const manualSync = async () => {
   try {
     const response = await sendMessage("manualSync");
     if (response.success) {
-      showNotification(response.message || "同步成功！", "success");
+      showNotification(response.message || "推送成功！", "success");
     } else {
-      throw new Error(response.error || "未知同步错误");
+      throw new Error(response.error || "未知推送错误");
     }
   } catch (e: any) {
-    showNotification(`同步失败: ${e.message}`, "error");
+    showNotification(`推送失败: ${e.message}`, "error");
   } finally {
     isSyncing.value = false;
   }
 };
 
-onMounted(async () => {
+const exportData = async () => {
+  try {
+    const response = await sendMessage("exportAllData");
+    if (!response.success) throw new Error(response.error);
+
+    const dataStr = JSON.stringify(response.data, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
+    a.download = `cookiesyncer-backup-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showNotification("数据已成功导出！", "success");
+  } catch (e: any) {
+    showNotification(`导出失败: ${e.message}`, "error");
+  }
+};
+
+const importData = () => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json";
+  input.onchange = async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        const response = await sendMessage("importAllData", { data });
+        if (response.success) {
+          showNotification("数据导入成功！请重新加载插件。", "success");
+          // Optionally, re-initialize the settings view after import
+          await loadInitialSettings();
+        } else {
+          throw new Error(response.error);
+        }
+      } catch (err: any) {
+        showNotification(`导入失败: ${err.message}`, "error");
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+};
+
+const loadInitialSettings = async () => {
   const { syncSettings: storedSettings } = await chrome.storage.local.get("syncSettings");
   if (storedSettings) {
     syncSettings.value.apiEndpoint = storedSettings.apiEndpoint || "";
@@ -211,7 +279,9 @@ onMounted(async () => {
       }
     }
   }
-});
+};
+
+onMounted(loadInitialSettings);
 </script>
 
 <style scoped>

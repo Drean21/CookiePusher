@@ -1,7 +1,7 @@
 {
   "name": "cookiesyncer",
   "version": "1.0.0",
-  "description": "跨站点、跨设备的 Cookie/TOKEN 同步助手",
+  "description": "跨站点、跨设备的 Cookie/TOKEN 推送助手",
   "type": "module",
   "scripts": {
     "dev": "vite",

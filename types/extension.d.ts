@@ -16,7 +16,7 @@ export interface DomainConfig {
   updatedTime: string;
 }
 
-// 同步日志接口
+// 推送日志接口
 export interface SyncLog {
   id: string;
   domain: string;
@@ -26,7 +26,7 @@ export interface SyncLog {
   timestamp: string;
 }
 
-// 同步结果接口
+// 推送结果接口
 export interface SyncResult {
   success: boolean;
   renewal?: RenewalResult;

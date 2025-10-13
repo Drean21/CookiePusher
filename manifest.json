@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "CookieSyncer – 通用 Cookie/TOKEN 同步助手",
+    "name": "CookieSyncer – 通用 Cookie/TOKEN 推送助手",
     "version": "1.0.0",
-    "description": "跨站点、跨设备的 Cookie/TOKEN 自动续期与同步助手，让登录状态永远在线",
+    "description": "跨站点、跨设备的 Cookie/TOKEN 自动续期与推送助手，让登录状态永远在线",
     "permissions": [
         "cookies",
         "storage",

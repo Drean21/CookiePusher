@@ -1,13 +1,13 @@
 <template>
   <div class="managed-view-container">
     <div v-if="loading" class="loading-state">
-      <p>正在加载同步列表...</p>
+      <p>正在加载推送列表...</p>
     </div>
     <div
       v-else-if="Object.keys(managedDomains).length === 0 && !isAdding"
       class="empty-state"
     >
-      <p>同步列表为空。</p>
+      <p>推送列表为空。</p>
       <p class="tip">请在“当前页面”视图中添加Cookie，或在此处手动添加一个新域。</p>
       <div class="add-domain-form">
         <input
@@ -25,7 +25,7 @@
       <!-- Left Sidebar -->
       <aside class="sidebar">
         <div class="sidebar-header">
-          <p>已同步域名</p>
+          <p>已推送域名</p>
         </div>
         <div class="add-domain-form">
           <input
@@ -77,14 +77,14 @@
                     :class="{ disabled: !hasSelectedCookies(domain) }"
                     >复制选中</a
                   >
-                  <a @click.stop="copyCookiesForDomain(domain, 'synced')">复制同步序列</a>
+                  <a @click.stop="copyCookiesForDomain(domain, 'synced')">复制推送序列</a>
                   <a @click.stop="copyCookiesForDomain(domain, 'all')">复制全部</a>
                 </div>
               </div>
               <button
                 @click.stop="removeDomain(domain)"
                 class="action-btn remove-btn"
-                title="移除该域下的所有同步项"
+                title="移除该域下的所有推送项"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -141,7 +141,7 @@
               <div class="filter-item">
                 <label>
                   <input type="checkbox" v-model="showOnlyInSync" />
-                  只显示已同步
+                  只显示已推送
                 </label>
               </div>
             </div>
@@ -150,7 +150,7 @@
           <div class="cookie-list-header">
             <span class="cookie-info-header">Cookie 信息</span>
             <div class="cookie-actions-header">
-              <span title="是否将此Cookie加入同步列表？">同步</span>
+              <span title="是否将此Cookie加入推送列表？">推送</span>
               <span title="是否将此Cookie共享到公共池？">共享</span>
             </div>
           </div>
@@ -202,7 +202,7 @@
                     <a @click.prevent="copyCookie(cookie, 'json')">复制 JSON</a>
                   </div>
                 </div>
-                <label class="switch" title="同步此Cookie">
+                <label class="switch" title="推送此Cookie">
                   <input
                     type="checkbox"
                     :checked="isCookieInSyncList(cookie)"
@@ -215,7 +215,7 @@
                   :title="
                     isCookieInSyncList(cookie)
                       ? '共享此Cookie到公共池'
-                      : '请先同步此Cookie'
+                      : '请先推送此Cookie'
                   "
                 >
                   <input
@@ -234,7 +234,7 @@
           </div>
         </div>
         <div v-else class="empty-state">
-          <p>请在左侧选择一个域名以管理其Cookie同步状态。</p>
+          <p>请在左侧选择一个域名以管理其Cookie推送状态。</p>
         </div>
       </section>
     </div>
@@ -396,7 +396,7 @@ const toggleSync = async (cookie: Cookie) => {
   }
   syncListMap.value = newSyncMap;
   showNotification(
-    `已${isInSync ? "从同步列表移除" : "添加"} ${cookie.name}`,
+    `已${isInSync ? "从推送列表移除" : "添加"} ${cookie.name}`,
     "success",
     2000
   );
@@ -408,10 +408,10 @@ const toggleSync = async (cookie: Cookie) => {
     // Revert UI on failure
     const revertedMap = { ...syncListMap.value };
     if (isInSync) {
-       // This part is tricky, as the original cookie might not have had isSharable.
-       // Re-fetching from storage on error is safer.
-       const { syncList: storedSyncList } = await chrome.storage.local.get("syncList");
-       if (storedSyncList) groupAndRenderSyncList(storedSyncList);
+      // This part is tricky, as the original cookie might not have had isSharable.
+      // Re-fetching from storage on error is safer.
+      const { syncList: storedSyncList } = await chrome.storage.local.get("syncList");
+      if (storedSyncList) groupAndRenderSyncList(storedSyncList);
     } else {
       delete revertedMap[key]; // It was added, so remove it
       syncListMap.value = revertedMap;
@@ -421,7 +421,7 @@ const toggleSync = async (cookie: Cookie) => {
 
 const toggleShare = (cookie: Cookie) => {
   if (!isCookieInSyncList(cookie)) {
-    showNotification("请先同步此Cookie才能开启共享", "info");
+    showNotification("请先推送此Cookie才能开启共享", "info");
     return;
   }
   const key = getCookieKey(cookie);
@@ -440,13 +440,14 @@ const toggleShare = (cookie: Cookie) => {
   );
 
   // Send the entire updated list to the background script
-  sendMessage("updateSyncList", { syncList: Object.values(newSyncMap) })
-    .catch(async (e: any) => {
+  sendMessage("updateSyncList", { syncList: Object.values(newSyncMap) }).catch(
+    async (e: any) => {
       showNotification(`更新共享状态失败: ${e.message}`, "error");
       // Revert UI on failure by re-fetching from storage
       const { syncList: storedSyncList } = await chrome.storage.local.get("syncList");
       if (storedSyncList) groupAndRenderSyncList(storedSyncList);
-    });
+    }
+  );
 };
 
 const addNewDomain = async () => {
@@ -457,7 +458,7 @@ const addNewDomain = async () => {
     const response = await sendMessage("getCookiesForDomain", { domain: domainToAdd });
     if (response.success && response.cookies.length > 0) {
       await sendMessage("syncAllCookiesForDomain", { cookies: response.cookies });
-      showNotification(`已成功添加域 ${domainToAdd} 并同步其所有Cookie。`, "success");
+      showNotification(`已成功添加域 ${domainToAdd} 并推送其所有Cookie。`, "success");
     } else {
       showNotification(`域 ${domainToAdd} 下未找到任何Cookie。`, "info");
     }
@@ -521,17 +522,16 @@ const copyCookiesForDomain = async (
 };
 
 const removeDomain = async (domain: string) => {
-  if (window.confirm(`确定要从同步列表中移除域名 "${domain}" 吗？`)) {
+  if (window.confirm(`确定要从推送列表中移除域名 "${domain}" 吗？`)) {
     try {
       const response = await sendMessage("removeDomainFromSyncList", { domain });
       showNotification(`已移除域名 ${domain}`, "success");
-      
+
       if (selectedDomain.value === domain) {
-          selectedDomain.value = null;
+        selectedDomain.value = null;
       }
       // Use the authoritative list returned from the background script
       groupAndRenderSyncList(response.syncList || []);
-
     } catch (e: any) {
       showNotification(`移除失败: ${e.message}`, "error");
     }
