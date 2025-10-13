@@ -35,27 +35,28 @@
                   cookie.expirationDate ? formatTime(cookie.expirationDate) : "Session"
                 }}</span>
               </div>
-              <template v-if="cookie.stats.history && cookie.stats.history.length > 0">
-                <div class="detail-row">
-                  <span>上次续期:</span>
-                  <span :class="['last-status', cookie.stats.history[0].status]">
-                    {{ formatStatus(cookie.stats.history[0].status) }} @
-                    {{ formatTime(cookie.stats.history[0].timestamp) }}
-                  </span>
-                </div>
-                <div class="detail-row">
-                  <span>续期来源:</span>
-                  <span>{{ formatChangeSource(cookie.stats.history[0].changeSource) }}</span>
-                </div>
-                <div class="detail-row" v-if="cookie.stats.history[0].intervalSeconds !== undefined">
-                  <span>距上次:</span>
-                  <span>{{ formatInterval(cookie.stats.history[0].intervalSeconds) }}</span>
-                </div>
-                <div class="detail-row error-reason" v-if="cookie.stats.history[0].status === 'failure' && cookie.stats.history[0].error">
-                  <span>失败原因:</span>
-                  <span :title="cookie.stats.history[0].error">{{ cookie.stats.history[0].error }}</span>
-                </div>
-              </template>
+               <div class="history-toggle" v-if="cookie.stats.history && cookie.stats.history.length > 0">
+                   <button @click="toggleHistory(cookie.key)">
+                   {{ cookie.isHistoryExpanded ? '收起' : '查看' }}活动历史
+                   </button>
+               </div>
+              <div class="history-section" v-if="cookie.isHistoryExpanded">
+                <ul class="history-list">
+                  <li v-for="(item, index) in cookie.stats.history.slice(0, 5)" :key="index" class="history-item">
+                    <div class="history-item-header">
+                       <span :class="['history-status', item.status]">{{ formatStatus(item.status) }}</span>
+                       <span class="history-timestamp">{{ formatTime(item.timestamp) }}</span>
+                    </div>
+                    <div class="history-item-body">
+                      <span class="history-source">来源: {{ formatChangeSource(item.changeSource) }}</span>
+                      <span class="history-interval" v-if="item.intervalSeconds !== undefined">间隔: {{ formatInterval(item.intervalSeconds) }}</span>
+                    </div>
+                    <div class="history-item-error" v-if="item.status === 'failure' && item.error">
+                      原因: {{ item.error }}
+                    </div>
+                  </li>
+                </ul>
+              </div>
             </div>
           </li>
         </ul>
@@ -89,6 +90,7 @@ const loading = ref(true);
 const syncList = ref<Cookie[]>([]);
 const rawStats = ref<{ [key: string]: CookieStat }>({});
 const selectedDomain = ref<string | null>(null);
+const expandedHistories = ref<Record<string, boolean>>({});
 
 const domains = computed(() => {
   const domainSet = new Set<string>();
@@ -118,6 +120,7 @@ const sortedCookies = computed(() => {
       value: rawStats.value[key]?.value || cookie.value,
       expirationDate: rawStats.value[key]?.expirationDate || cookie.expirationDate,
       stats,
+      isHistoryExpanded: expandedHistories.value[key] || false,
     };
   });
 
@@ -164,6 +167,10 @@ const formatInterval = (seconds: number | undefined) => {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return `${minutes}分${remainingSeconds}秒`;
+};
+
+const toggleHistory = (cookieKey: string) => {
+  expandedHistories.value[cookieKey] = !expandedHistories.value[cookieKey];
 };
 
 const getRegistrableDomain = (domain: string): string => {
@@ -274,6 +281,65 @@ onMounted(async () => {
   flex-direction: column;
   gap: 8px;
 }
+
+.history-toggle {
+  margin-top: 8px;
+}
+
+.history-toggle button {
+  background: none;
+  border: none;
+  color: #667eea;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.history-section {
+  margin-top: 8px;
+}
+
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.history-item {
+  font-size: 12px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  padding: 8px;
+}
+.history-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.history-status {
+  font-weight: bold;
+}
+.history-status.success { color: #2e7d32; }
+.history-status.failure { color: #c62828; }
+.history-status.no-change { color: #757575; }
+
+.history-timestamp {
+  color: #777;
+}
+.history-item-body {
+  display: flex;
+  justify-content: space-between;
+  color: #555;
+}
+.history-item-error {
+  margin-top: 4px;
+  color: #c62828;
+  word-break: break-all;
+}
+
 .cookie-header {
   display: flex;
   justify-content: space-between;

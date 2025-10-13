@@ -315,7 +315,7 @@ async function triggerFullSync() {
         // await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: responseData.data });
     } catch (e: any) {
         addLog(`云端推送失败: ${e.message}`, 'error');
-        // We throw the error so the original caller can catch it if needed.
+        // Re-throw the error so the original caller can catch it. This is crucial.
         throw e;
     }
 }
@@ -349,10 +349,11 @@ chrome.cookies.onChanged.addListener(async (changeInfo) => {
 
             await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedList });
             
-            // The cookie has been updated, now let's update its stats
+            await triggerFullSync();
+            
+            // Log success only after the sync is successful.
             await updateCookieStat(key, 'success', 'on-change');
 
-            await triggerFullSync();
         } catch (e: any) {
             const errorMessage = e.message || '未知错误';
             addLog(`处理Cookie变更时出错: ${errorMessage}`, 'error');
@@ -539,8 +540,26 @@ async function handleKeepAlivePostTasks() {
         }
     }
 
+    // Generate a summary log
+    const summary = { success: 0, failure: 0, noChange: 0 };
+    const stats = (await chrome.storage.local.get(STATS_STORAGE_KEY))[STATS_STORAGE_KEY] || {};
+    for (const key of preSnapshot.keys()) {
+        const history = stats[key]?.history;
+        if (history && history.length > 0) {
+            const lastStatus = history[0].status;
+            if (history[0].changeSource === 'keep-alive') { // Only count changes from this run
+                 if (lastStatus === 'success') summary.success++;
+                 else if (lastStatus === 'failure') summary.failure++;
+                 else summary.noChange++;
+            }
+        } else {
+            summary.noChange++;
+        }
+    }
+    const totalProcessed = summary.success + summary.failure + summary.noChange;
+    await addLog(`保活任务完成: 处理 ${totalProcessed}个, 成功 ${summary.success}个, 失败 ${summary.failure}个, 无变化 ${summary.noChange}个。`, 'success');
+
     keepAliveTaskData = null;
-    await addLog('保活任务与日志记录全部完成。', 'info');
 }
 
 async function handleGetKeepAliveStats() {
