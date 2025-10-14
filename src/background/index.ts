@@ -501,12 +501,16 @@ async function handleKeepAlivePostTasks() {
     }
     const { preSnapshot, syncList } = keepAliveTaskData;
     
-    await addLog('静默访问完成，开始对比Cookie快照并更新统计数据。', 'info');
+    await addLog('静默访问完成，开始对比Cookie快照。', 'info');
+
+    const successfulCookies: string[] = [];
+    const failedCookies: { name: string; error: string }[] = [];
 
     for (const oldCookieKey of preSnapshot.keys()) {
         const cookieInfo = syncList.find(c => getCookieKey(c) === oldCookieKey);
         if (!cookieInfo) continue;
-        
+
+        const cookieDisplayName = `${cookieInfo.name} (${cookieInfo.domain})`;
         let currentStatus: 'success' | 'failure' | 'no-change' = 'no-change';
         let errorMessage: string | undefined;
 
@@ -515,8 +519,7 @@ async function handleKeepAlivePostTasks() {
             const oldSnapshot = preSnapshot.get(oldCookieKey)!;
 
             if (!newCookie) {
-                errorMessage = `Cookie '${cookieInfo.name}' 在 ${cookieInfo.domain} 上已失效或被移除。`;
-                await addLog(`[保活警告] ${errorMessage}`, 'error');
+                errorMessage = `已失效或被移除`;
                 currentStatus = 'failure';
             } else {
                 const expirationChanged = newCookie.expirationDate && oldSnapshot.expirationDate && newCookie.expirationDate > oldSnapshot.expirationDate;
@@ -524,42 +527,39 @@ async function handleKeepAlivePostTasks() {
 
                 if (expirationChanged || valueChanged) {
                     currentStatus = 'success';
-                    if (valueChanged) {
-                        await addLog(`[保活更新] Cookie '${newCookie.name}' 的值已更新，有效期已延长。`, 'success');
-                    } else {
-                        await addLog(`[保活成功] Cookie '${newCookie.name}' 的有效期已延长。`, 'success');
-                    }
                 }
             }
         } catch (e: any) {
             errorMessage = e.message || '未知错误';
-            await addLog(`[快照对比警告] 对比Cookie '${cookieInfo.name}' for '${cookieInfo.domain}' 失败: ${errorMessage}`, 'error');
             currentStatus = 'failure';
         }
         
-        if (currentStatus !== 'no-change') {
-            await updateCookieStat(oldCookieKey, currentStatus, 'keep-alive', errorMessage);
+        if (currentStatus === 'success') {
+            successfulCookies.push(cookieDisplayName);
+            await updateCookieStat(oldCookieKey, 'success', 'keep-alive');
+        } else if (currentStatus === 'failure') {
+            const finalError = errorMessage || '未知错误';
+            failedCookies.push({ name: cookieDisplayName, error: finalError });
+            await updateCookieStat(oldCookieKey, 'failure', 'keep-alive', finalError);
         }
     }
 
-    // Generate a summary log
-    const summary = { success: 0, failure: 0, noChange: 0 };
-    const stats = (await chrome.storage.local.get(STATS_STORAGE_KEY))[STATS_STORAGE_KEY] || {};
-    for (const key of preSnapshot.keys()) {
-        const history = stats[key]?.history;
-        if (history && history.length > 0) {
-            const lastStatus = history[0].status;
-            if (history[0].changeSource === 'keep-alive') { // Only count changes from this run
-                 if (lastStatus === 'success') summary.success++;
-                 else if (lastStatus === 'failure') summary.failure++;
-                 else summary.noChange++;
-            }
-        } else {
-            summary.noChange++;
-        }
+    const totalProcessed = preSnapshot.size;
+    const successCount = successfulCookies.length;
+    const failureCount = failedCookies.length;
+    const noChangeCount = totalProcessed - successCount - failureCount;
+
+    let summaryMessage = `保活任务完成: 处理 ${totalProcessed}个, 成功 ${successCount}个, 失败 ${failureCount}个, 无变化 ${noChangeCount}个。`;
+    
+    if (successCount > 0) {
+        summaryMessage += `\n  [成功]: ${successfulCookies.join('; ')}`;
     }
-    const totalProcessed = summary.success + summary.failure + summary.noChange;
-    await addLog(`保活任务完成: 处理 ${totalProcessed}个, 成功 ${summary.success}个, 失败 ${summary.failure}个, 无变化 ${summary.noChange}个。`, 'success');
+    if (failureCount > 0) {
+        const failureDetails = failedCookies.map(f => `${f.name}: ${f.error}`).join('; ');
+        summaryMessage += `\n  [失败]: ${failureDetails}`;
+    }
+
+    await addLog(summaryMessage, successCount > 0 || failureCount > 0 ? 'success' : 'info');
 
     keepAliveTaskData = null;
 }
