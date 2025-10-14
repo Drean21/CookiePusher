@@ -522,7 +522,7 @@ async function handleKeepAlivePostTasks() {
                 errorMessage = `已失效或被移除`;
                 currentStatus = 'failure';
             } else {
-                const expirationChanged = newCookie.expirationDate && oldSnapshot.expirationDate && newCookie.expirationDate > oldSnapshot.expirationDate;
+                const expirationChanged = (newCookie.expirationDate || 0) > (oldSnapshot.expirationDate || 0);
                 const valueChanged = newCookie.value !== oldSnapshot.value;
 
                 if (expirationChanged || valueChanged) {
