@@ -495,6 +495,37 @@ paths:
       tags:
       - Sync
   /user/settings:
+    get:
+      description: Retrieves settings for the authenticated user, such as whether
+        cookie sharing is enabled.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  properties:
+                    sharing_enabled:
+                      type: boolean
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get user settings
+      tags:
+      - User
     put:
       consumes:
       - application/json

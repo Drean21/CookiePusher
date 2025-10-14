@@ -428,6 +428,10 @@ func (s *SQLiteStore) UpdateUserSharing(userID int64, enabled bool) error {
 	return nil
 }
 
+func (s *SQLiteStore) GetUserSettings(userID int64) (*model.User, error) {
+	return s.GetUserByID(userID)
+}
+
 
 // --- Cookie Methods ---
 

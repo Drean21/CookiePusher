@@ -172,3 +172,4 @@ func AdminRefreshAPIKeysHandler(db store.Store) http.HandlerFunc {
 		RespondWithJSON(w, http.StatusOK, "Keys refreshed successfully", refreshedUsers)
 	}
 }
+

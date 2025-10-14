@@ -25,6 +25,10 @@
             <span>操作日志</span>
             <span class="arrow">></span>
           </li>
+           <li @click="activeSubView = 'sharing'">
+            <span>共享池</span>
+            <span class="arrow">></span>
+          </li>
           <li @click="activeSubView = 'data'">
             <span>数据管理</span>
             <span class="arrow">></span>
@@ -85,6 +89,23 @@
         </div>
       </div>
 
+      <div v-if="activeSubView === 'sharing'" class="sub-view">
+        <div class="setting-item">
+          <div class="label-with-switch">
+            <label for="sharing-enabled">启用Cookie共享池 <span v-if="!isOnline" class="offline-indicator">（已离线）</span></label>
+            <div class="toggle-switch">
+              <label class="switch">
+                <input type="checkbox" id="sharing-enabled" v-model="sharingEnabled" @change="updateSharingSettings">
+                <span class="slider round"></span>
+              </label>
+            </div>
+          </div>
+          <p class="tip">
+            <strong>请仔细阅读：</strong>启用此功能，即表示您同意将标记为“可共享”的Cookie上传至一个公共池中。这些Cookie可能会被本服务的其他用户用于身份验证或执行操作。虽然我们采取措施保护您的数据，但服务提供方不对因共享Cookie而导致的任何账户安全问题、数据泄露或潜在损失承担责任。如果您不希望承担此风险，请勿开启此功能。
+          </p>
+        </div>
+      </div>
+
       <div v-if="activeSubView === 'keep-alive'" class="sub-view">
         <div class="setting-item">
           <label for="keep-alive-frequency">保活任务频率 (分钟)</label>
@@ -123,7 +144,7 @@ type ShowNotification = (
 ) => void;
 const showNotification = inject<ShowNotification>("showNotification", () => {});
 
-type SubView = "main" | "sync" | "logs" | "keep-alive" | "data";
+type SubView = "main" | "sync" | "logs" | "keep-alive" | "data" | "sharing";
 
 const activeSubView = ref<SubView>("main");
 
@@ -139,6 +160,8 @@ const headerTitle = computed(() => {
       return "Cookie保活";
     case "data":
       return "数据管理";
+    case "sharing":
+        return "共享池设置";
     default:
       return "设置";
   }
@@ -153,6 +176,8 @@ const syncSettings = ref({
 const isTesting = ref(false);
 const isSaving = ref(false);
 const isSyncing = ref(false);
+const sharingEnabled = ref(false);
+const isOnline = ref(true);
 
 const SECRET_KEY = "cookie-syncer-secret-key";
 
@@ -261,7 +286,21 @@ const importData = () => {
   input.click();
 };
 
+const updateSharingSettings = async () => {
+    try {
+        await sendMessage("updateUserSettings", { sharing_enabled: sharingEnabled.value });
+        await chrome.storage.local.set({ sharingSettings: { enabled: sharingEnabled.value } });
+        isOnline.value = true;
+        showNotification("共享设置已更新！", "success");
+    } catch (e: any) {
+        showNotification(`更新失败: ${e.message}`, "error");
+        // Revert the toggle on failure
+        sharingEnabled.value = !sharingEnabled.value;
+    }
+};
+
 const loadInitialSettings = async () => {
+  // Load sync settings
   const { syncSettings: storedSettings } = await chrome.storage.local.get("syncSettings");
   if (storedSettings) {
     syncSettings.value.apiEndpoint = storedSettings.apiEndpoint || "";
@@ -278,6 +317,25 @@ const loadInitialSettings = async () => {
         showNotification("无法解密Auth Token，请重新输入。", "error");
       }
     }
+  }
+
+  // Load sharing settings from the backend
+  try {
+    const response = await sendMessage("getUserSettings");
+    if (response.success && typeof response.data.sharing_enabled === 'boolean') {
+      sharingEnabled.value = response.data.sharing_enabled;
+      await chrome.storage.local.set({ sharingSettings: { enabled: sharingEnabled.value } });
+      isOnline.value = true;
+    } else {
+        throw new Error(response.error || "Invalid data from API");
+    }
+  } catch(e: any) {
+      console.warn("Could not fetch initial sharing settings from API:", e.message);
+      const { sharingSettings } = await chrome.storage.local.get("sharingSettings");
+      if (sharingSettings && typeof sharingSettings.enabled === 'boolean') {
+          sharingEnabled.value = sharingSettings.enabled;
+      }
+      isOnline.value = false;
   }
 };
 
@@ -383,6 +441,17 @@ onMounted(loadInitialSettings);
   color: #9e9e9e;
   margin-top: 8px;
 }
+.offline-indicator {
+    color: #f44336; /* Red color for offline status */
+    font-size: 12px;
+    font-weight: normal;
+}
+.label-with-switch {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
 .setting-actions {
   display: flex;
   gap: 12px;
@@ -432,5 +501,60 @@ onMounted(loadInitialSettings);
   100% {
     transform: rotate(360deg);
   }
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 34px;
+  height: 20px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 12px;
+  width: 12px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+}
+
+input:checked + .slider {
+  background-color: #667eea;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #667eea;
+}
+
+input:checked + .slider:before {
+  transform: translateX(14px);
+}
+
+.slider.round {
+  border-radius: 20px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
 }
 </style>

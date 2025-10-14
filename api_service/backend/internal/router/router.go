@@ -44,6 +44,7 @@ func NewRouter(db store.Store, locker *handler.UserLockManager) *chi.Mux {
 		r.Get("/api/v1/cookies/all", handler.GetAllCookiesHandler(db))
 		r.Get("/api/v1/cookies/{domain}", handler.GetDomainCookiesHandler(db))
 		r.Get("/api/v1/cookies/{domain}/{name}", handler.GetCookieValueHandler(db))
+		r.Get("/api/v1/user/settings", handler.GetUserSettingsHandler(db))
 		r.Put("/api/v1/user/settings", handler.UpdateUserSettingsHandler(db))
 	})
 

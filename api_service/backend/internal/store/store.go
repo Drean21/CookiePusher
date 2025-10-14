@@ -17,6 +17,7 @@ type Store interface {
 	// Single operation for a user to refresh their own key
 	UpdateUserAPIKey(userID int64, newAPIKey string) error
 	UpdateUserSharing(userID int64, enabled bool) error
+	GetUserSettings(userID int64) (*model.User, error)
 
 	// Cookie methods
 	SyncCookies(userID int64, cookies []*model.Cookie) error

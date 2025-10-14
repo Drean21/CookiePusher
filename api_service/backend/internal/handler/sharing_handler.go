@@ -47,6 +47,30 @@ func UpdateUserSettingsHandler(db store.Store) http.HandlerFunc {
 	}
 }
 
+// GetUserSettingsHandler handles fetching a user's sharing settings.
+// @Summary      Get user settings
+// @Description  Retrieves settings for the authenticated user, such as whether cookie sharing is enabled.
+// @Tags         User
+// @Produce      json
+// @Success      200  {object}  handler.APIResponse{data=object{sharing_enabled=bool}}
+// @Failure      401  {object}  handler.APIResponse
+// @Failure      500  {object}  handler.APIResponse
+// @Security     ApiKeyAuth
+// @Router       /user/settings [get]
+func GetUserSettingsHandler(db store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user := UserFromContext(r.Context())
+		if user == nil {
+			RespondWithError(w, http.StatusInternalServerError, "Could not identify user")
+			return
+		}
+
+		RespondWithJSON(w, http.StatusOK, "Successfully retrieved user settings", map[string]bool{
+			"sharing_enabled": user.SharingEnabled,
+		})
+	}
+}
+
 // GetSharableCookiesHandler handles fetching sharable cookies for a domain.
 // @Summary      [Admin] Get sharable cookies for a domain
 // @Description  (Admin-only) Retrieves all cookies for a given domain that have been marked as "sharable" by users who have enabled sharing. By default, returns an HTTP header string. Use ?format=json to get structured JSON.

@@ -86,6 +86,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         },
         exportAllData: handleExportAllData,
         importAllData: handleImportAllData,
+        getUserSettings: handleGetUserSettings,
+        updateUserSettings: handleUpdateUserSettings,
     };
 
     if (actionMap[action]) {
@@ -683,6 +685,53 @@ async function handleImportAllData(payload: { data: any }) {
     await performDataIntegrityCheck();
 
     return { success: true };
+}
+
+
+async function handleGetUserSettings() {
+    const { apiEndpoint, authToken } = await getDecryptedSettings();
+    const url = new URL(apiEndpoint);
+    url.pathname = '/api/v1/user/settings';
+
+    const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: { 'x-api-key': authToken, 'Content-Type': 'application/json' }
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+        const errorMessage = result?.message || response.statusText;
+        throw new Error(`获取用户设置失败: ${response.status} ${errorMessage}`);
+    }
+
+    if (result.code !== 200) {
+        throw new Error(`获取用户设置接口响应异常: ${result.message}`);
+    }
+    
+    return { data: result.data };
+}
+
+async function handleUpdateUserSettings(payload: { sharing_enabled: boolean }) {
+    const { apiEndpoint, authToken } = await getDecryptedSettings();
+    const url = new URL(apiEndpoint);
+    url.pathname = '/api/v1/user/settings';
+
+    const response = await fetch(url.toString(), {
+        method: 'PUT',
+        headers: { 'x-api-key': authToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        throw new Error(`更新用户设置失败: ${response.status} ${response.statusText}`);
+    }
+    const data = await response.json();
+     if (data.code !== 200) {
+        throw new Error(`更新用户设置接口响应异常: ${data.message}`);
+    }
+    addLog(`云端共享设置已更新为: ${payload.sharing_enabled ? '开启' : '关闭'}`, 'success');
+    return data;
 }
 
 
