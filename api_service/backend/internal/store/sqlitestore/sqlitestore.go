@@ -498,7 +498,7 @@ func (s *SQLiteStore) GetCookiesByUserID(userID int64) ([]*model.Cookie, error) 
 	}
 	defer rows.Close()
 
-	var cookies []*model.Cookie
+	cookies := make([]*model.Cookie, 0)
 	for rows.Next() {
 		var c model.Cookie
 		err := rows.Scan(
@@ -520,7 +520,7 @@ func (s *SQLiteStore) GetCookiesByDomain(userID int64, domain string) ([]*model.
 		return nil, fmt.Errorf("could not query cookies by domain: %w", err)
 	}
 	defer rows.Close()
-	var cookies []*model.Cookie
+	cookies := make([]*model.Cookie, 0)
 	for rows.Next() {
 		var c model.Cookie
 		err := rows.Scan(
@@ -567,7 +567,7 @@ func (s *SQLiteStore) GetSharableCookiesByDomain(domain string) ([]*model.Cookie
 	}
 	defer rows.Close()
 
-	var cookies []*model.Cookie
+	cookies := make([]*model.Cookie, 0)
 	for rows.Next() {
 		var c model.Cookie
 		err := rows.Scan(

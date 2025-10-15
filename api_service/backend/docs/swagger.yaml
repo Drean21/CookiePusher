@@ -64,11 +64,12 @@ info:
 paths:
   /admin/pool/cookies/{domain}:
     get:
-      description: (Admin-only) Retrieves all cookies for a given domain that have
-        been marked as "sharable" by users who have enabled sharing. By default, returns
-        an HTTP header string. Use ?format=json to get structured JSON.
+      description: |-
+        (Admin-only) Retrieves all sharable cookies for a given domain, grouped by the user who shared them.
+        By default, returns an array of strings, where each string is a user's cookies formatted as an HTTP 'Cookie' header.
+        Use `?format=json` to get a structured JSON response, where each element contains the user's ID and their list of cookies.
       parameters:
-      - description: Domain
+      - description: The domain to fetch cookies for
         in: path
         name: domain
         required: true
@@ -83,13 +84,22 @@ paths:
       - application/json
       responses:
         "200":
-          description: OK
+          description: JSON response with `?format=json`
           schema:
             allOf:
             - $ref: '#/definitions/handler.APIResponse'
             - properties:
                 data:
-                  type: string
+                  items:
+                    properties:
+                      cookies:
+                        items:
+                          $ref: '#/definitions/model.Cookie'
+                        type: array
+                      user_id:
+                        type: integer
+                    type: object
+                  type: array
               type: object
         "401":
           description: Unauthorized
@@ -105,7 +115,7 @@ paths:
             $ref: '#/definitions/handler.APIResponse'
       security:
       - ApiKeyAuth: []
-      summary: '[Admin] Get sharable cookies for a domain'
+      summary: '[Admin] Get sharable cookies by domain, grouped by user'
       tags:
       - Admin
   /admin/users:

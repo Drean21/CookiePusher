@@ -19,18 +19,18 @@
     "paths": {
         "/admin/pool/cookies/{domain}": {
             "get": {
-                "description": "(Admin-only) Retrieves all cookies for a given domain that have been marked as \"sharable\" by users who have enabled sharing. By default, returns an HTTP header string. Use ?format=json to get structured JSON.",
+                "description": "(Admin-only) Retrieves all sharable cookies for a given domain, grouped by the user who shared them.\nBy default, returns an array of strings, where each string is a user's cookies formatted as an HTTP 'Cookie' header.\nUse `?format=json` to get a structured JSON response, where each element contains the user's ID and their list of cookies.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Admin"
                 ],
-                "summary": "[Admin] Get sharable cookies for a domain",
+                "summary": "[Admin] Get sharable cookies by domain, grouped by user",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Domain",
+                        "description": "The domain to fetch cookies for",
                         "name": "domain",
                         "in": "path",
                         "required": true
@@ -47,7 +47,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "OK",
+                        "description": "JSON response with `?format=json`",
                         "schema": {
                             "allOf": [
                                 {
@@ -57,7 +57,21 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "string"
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "cookies": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "$ref": "#/definitions/model.Cookie"
+                                                        }
+                                                    },
+                                                    "user_id": {
+                                                        "type": "integer"
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }

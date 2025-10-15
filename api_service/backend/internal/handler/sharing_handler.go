@@ -4,8 +4,11 @@ import (
 	"cookie-syncer/api/internal/store"
 	"encoding/json"
 	"net/http"
+
+	"sort"
 	"strings"
 
+	"cookie-syncer/api/internal/model"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -72,40 +75,69 @@ func GetUserSettingsHandler(db store.Store) http.HandlerFunc {
 }
 
 // GetSharableCookiesHandler handles fetching sharable cookies for a domain.
-// @Summary      [Admin] Get sharable cookies for a domain
-// @Description  (Admin-only) Retrieves all cookies for a given domain that have been marked as "sharable" by users who have enabled sharing. By default, returns an HTTP header string. Use ?format=json to get structured JSON.
+// @Summary      [Admin] Get sharable cookies by domain, grouped by user
+// @Description  (Admin-only) Retrieves all sharable cookies for a given domain, grouped by the user who shared them.
+// @Description  By default, returns an array of strings, where each string is a user's cookies formatted as an HTTP 'Cookie' header.
+// @Description  Use `?format=json` to get a structured JSON response, where each element contains the user's ID and their list of cookies.
 // @Tags         Admin
 // @Produce      json
-// @Param        domain   path      string  true   "Domain"
+// @Param        domain   path      string  true   "The domain to fetch cookies for"
 // @Param        format   query     string  false  "Output format"  Enums(json)
-// @Success      200      {object}  handler.APIResponse{data=string}
+// @Success      200      {object}  handler.APIResponse{data=[]string} "Default response: Array of HTTP Cookie header strings"
+// @Success      200      {object}  handler.APIResponse{data=[]object{user_id=int,cookies=[]model.Cookie}} "JSON response with `?format=json`"
 // @Failure      401      {object}  handler.APIResponse "Unauthorized"
 // @Failure      403      {object}  handler.APIResponse "Forbidden"
-// @Failure      500      {object}  handler.APIResponse
+// @Failure      500      {object}  handler.APIResponse "Internal Server Error"
 // @Security     ApiKeyAuth
 // @Router       /admin/pool/cookies/{domain} [get]
 func GetSharableCookiesHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		domain := chi.URLParam(r, "domain")
-		cookies, err := db.GetSharableCookiesByDomain(domain)
+		allCookies, err := db.GetSharableCookiesByDomain(domain)
 		if err != nil {
 			RespondWithError(w, http.StatusInternalServerError, "Could not fetch sharable cookies")
 			return
 		}
 
+		// Group cookies by UserID
+		cookiesByUser := make(map[int64][]*model.Cookie)
+		for _, cookie := range allCookies {
+			cookiesByUser[cookie.UserID] = append(cookiesByUser[cookie.UserID], cookie)
+		}
+
+		// Sort user IDs for consistent output order
+		sortedUserIDs := make([]int64, 0, len(cookiesByUser))
+		for userID := range cookiesByUser {
+			sortedUserIDs = append(sortedUserIDs, userID)
+		}
+		sort.Slice(sortedUserIDs, func(i, j int) bool { return sortedUserIDs[i] < sortedUserIDs[j] })
+
 		format := r.URL.Query().Get("format")
 		if format == "json" {
-			RespondWithJSON(w, http.StatusOK, "Successfully retrieved sharable cookies", cookies)
-			return
+			// JSON format: [{user_id: 1, cookies: [...]}, {user_id: 2, cookies: [...]}]
+			type userCookies struct {
+				UserID  int64           `json:"user_id"`
+				Cookies []*model.Cookie `json:"cookies"`
+			}
+			var result []userCookies
+			for _, userID := range sortedUserIDs {
+				result = append(result, userCookies{
+					UserID:  userID,
+					Cookies: cookiesByUser[userID],
+				})
+			}
+			RespondWithJSON(w, http.StatusOK, "Successfully retrieved sharable cookies", result)
+		} else {
+			// Default format: ["cookie1=v1; cookie2=v2", "cookieA=vA; cookieB=vB"]
+			var result []string
+			for _, userID := range sortedUserIDs {
+				var cookieParts []string
+				for _, cookie := range cookiesByUser[userID] {
+					cookieParts = append(cookieParts, cookie.Name+"="+cookie.Value)
+				}
+				result = append(result, strings.Join(cookieParts, "; "))
+			}
+			RespondWithJSON(w, http.StatusOK, "Successfully retrieved sharable cookies", result)
 		}
-
-		// Default to HTTP Header string format
-		var cookieParts []string
-		for _, cookie := range cookies {
-			cookieParts = append(cookieParts, cookie.Name+"="+cookie.Value)
-		}
-		cookieHeader := strings.Join(cookieParts, "; ")
-
-		RespondWithJSON(w, http.StatusOK, "Successfully retrieved sharable cookies", cookieHeader)
 	}
 }
