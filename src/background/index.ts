@@ -480,7 +480,7 @@ async function handleKeepAlive() {
 
     keepAliveTaskData = { preSnapshot, syncList };
 
-    const domainsToRefresh = new Set(syncList.map(c => getRegistrableDomain(c.domain)));
+    const domainsToRefresh = new Set(syncList.map(c => c.domain.replace(/^\./, '')));
     const urlsToVisit = Array.from(domainsToRefresh).map(d => `https://${d}`);
     
     await addLog(`定时保活任务触发，准备为 ${urlsToVisit.length} 个域进行静默访问: ${Array.from(domainsToRefresh).join(', ')}`, 'info');
