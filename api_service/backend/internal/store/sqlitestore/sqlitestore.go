@@ -47,7 +47,7 @@ func New(dataSourceName string) (store.Store, error) {
 	}
 
 	if userCount == 0 {
-		adminAPIKey := "admin-secret-key-change-me"
+		adminAPIKey := uuid.New().String()
 		_, err := s.CreateUser(adminAPIKey, "admin")
 		if err != nil {
 			return nil, fmt.Errorf("could not create default admin user: %w", err)
