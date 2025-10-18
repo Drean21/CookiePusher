@@ -4,7 +4,7 @@
 
 import CryptoJS from 'crypto-js';
 
-type Cookie = chrome.cookies.Cookie & { isSharable?: boolean };
+import { Cookie } from '../../types/extension';
 
 const LOGS_STORAGE_KEY = 'cookieSyncerLogs';
 const SYNC_LIST_STORAGE_KEY = 'syncList';
@@ -90,6 +90,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         importAllData: handleImportAllData,
         getUserSettings: handleGetUserSettings,
         updateUserSettings: handleUpdateUserSettings,
+        updateCookieRemark: handleUpdateCookieRemark,
     };
 
     if (actionMap[action]) {
@@ -189,7 +190,8 @@ async function handleSyncCookies(payload: { cookie?: Cookie, cookies?: Cookie[] 
         // Preserve isSharable state if the cookie already exists
         const existingCookie = syncMap.get(key);
         const isSharable = c.isSharable ?? existingCookie?.isSharable ?? false;
-        syncMap.set(key, { ...c, isSharable });
+        const remark = c.remark ?? existingCookie?.remark ?? "";
+        syncMap.set(key, { ...c, isSharable, remark });
     });
 
     const updatedSyncList = Array.from(syncMap.values());
@@ -834,6 +836,29 @@ async function handleUpdateUserSettings(payload: { sharing_enabled: boolean }) {
     }
     addLog(`云端共享设置已更新为: ${payload.sharing_enabled ? '开启' : '关闭'}`, 'success');
     return data;
+}
+
+
+async function handleUpdateCookieRemark(payload: { cookieKey: string; remark: string }) {
+    if (!payload || typeof payload.cookieKey !== 'string' || typeof payload.remark !== 'string') {
+        throw new Error('无效的备注更新负载。');
+    }
+    const { cookieKey, remark } = payload;
+    const { [SYNC_LIST_STORAGE_KEY]: syncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
+
+    const cookieIndex = syncList.findIndex(c => getCookieKey(c) === cookieKey);
+    if (cookieIndex === -1) {
+        throw new Error('无法在推送列表中找到要更新备注的Cookie。');
+    }
+
+    // Update the remark
+    syncList[cookieIndex].remark = remark;
+
+    // Save the updated list. No sync is needed as this is a local-only feature.
+    await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: syncList });
+
+    addLog(`Cookie "${syncList[cookieIndex].name}" 的本地备注已更新。`, 'info');
+    return { success: true, updatedCookie: syncList[cookieIndex] };
 }
 
 

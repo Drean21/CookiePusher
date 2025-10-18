@@ -171,6 +171,17 @@
                 <span class="cookie-value-small">{{ cookie.value }}</span>
               </div>
               <div class="cookie-actions">
+                <!-- Remark Button -->
+                <button
+                  @click.stop="editRemark(cookie)"
+                  class="action-btn"
+                  :title="getRemark(cookie) || '添加/编辑备注'"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                  </svg>
+                </button>
                 <div class="copy-action">
                   <button
                     @click.stop="toggleCopyMenu(getCookieKey(cookie))"
@@ -282,6 +293,36 @@ const isCookieSharable = (cookie: Cookie): boolean => {
 
 const isCookieSelected = (cookie: Cookie): boolean =>
   selectedCookies.value.has(getCookieKey(cookie));
+
+const getRemark = (cookie: Cookie): string => {
+  const syncedCookie = syncListMap.value[getCookieKey(cookie)];
+  return syncedCookie?.remark || "";
+};
+
+const editRemark = async (cookie: Cookie) => {
+  if (!isCookieInSyncList(cookie)) {
+    showNotification("请先将Cookie加入推送列表才能添加备注。", "info");
+    return;
+  }
+  const currentRemark = getRemark(cookie);
+  const newRemark = window.prompt(`为 "${cookie.name}" 添加/编辑备注:`, currentRemark);
+
+  if (newRemark !== null && newRemark !== currentRemark) {
+    try {
+      const cookieKey = getCookieKey(cookie);
+      const response = await sendMessage("updateCookieRemark", { cookieKey, remark: newRemark });
+      if (response.success) {
+        // Optimistically update the local state
+        const newSyncMap = { ...syncListMap.value };
+        newSyncMap[cookieKey].remark = newRemark;
+        syncListMap.value = newSyncMap;
+        showNotification("备注已更新。", "success", 2000);
+      }
+    } catch (e: any) {
+      showNotification(`更新备注失败: ${e.message}`, "error");
+    }
+  }
+};
 
 const subDomainFilterOptions = computed(() => {
   const counts: { [key: string]: number } = {};
