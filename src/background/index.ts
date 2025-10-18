@@ -306,15 +306,12 @@ async function triggerFullSync() {
         
         const responseData = await response.json();
 
-        if (responseData.code !== 200 || !Array.isArray(responseData.data)) {
+        if (responseData.code !== 200) { // Go backend doesn't wrap data in sync response
             throw new Error(`推送响应格式错误: ${JSON.stringify(responseData)}`);
         }
         
-        addLog(`云端推送成功。云端现在有 ${responseData.data.length} 个Cookie。`, 'success');
+        addLog(`云端推送成功。`, 'success');
         
-        // The local storage is the source of truth, so we no longer overwrite it with the server's response.
-        // This effectively changes the behavior from "sync" to "push".
-        // await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: responseData.data });
     } catch (e: any) {
         addLog(`云端推送失败: ${e.message}`, 'error');
         // Re-throw the error so the original caller can catch it. This is crucial.
@@ -592,8 +589,9 @@ function transformCookieForAPI(cookie: Cookie): object {
         http_only: cookie.httpOnly,
         secure: cookie.secure,
         same_site: cookie.sameSite || 'unspecified',
-        is_sharable: cookie.isSharable || false, // Add the critical is_sharable field
+        is_sharable: cookie.isSharable || false,
         expires: cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toISOString() : null,
+        last_updated_from_extension_at: new Date().toISOString(),
     };
 }
 

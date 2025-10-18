@@ -10,7 +10,8 @@ tmp_dir = "tmp"
 # The main entry point of our application
 cmd = "go build -o ./tmp/main.exe ./cmd/api/main.go"
 # Binary file to run
-bin = "tmp/main.exe"
+bin = "tmp/main"
+args_bin = ["-pool-key=test", "-admin-key=admin-test"]
 # Command to run before building the binary.
 # This is the correct way to ensure swagger docs are generated on every change.
 pre_cmd = ["go run github.com/swaggo/swag/cmd/swag init -g cmd/api/main.go"]

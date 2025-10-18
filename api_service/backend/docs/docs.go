@@ -23,96 +23,9 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/admin/pool/cookies/{domain}": {
-            "get": {
-                "description": "(Admin-only) Retrieves all sharable cookies for a given domain, grouped by the user who shared them.\nBy default, returns an array of strings, where each string is a user's cookies formatted as an HTTP 'Cookie' header.\nUse ` + "`" + `?format=json` + "`" + ` to get a structured JSON response, where each element contains the user's ID and their list of cookies.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin"
-                ],
-                "summary": "[Admin] Get sharable cookies by domain, grouped by user",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "The domain to fetch cookies for",
-                        "name": "domain",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "enum": [
-                            "json"
-                        ],
-                        "type": "string",
-                        "description": "Output format",
-                        "name": "format",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "JSON response with ` + "`" + `?format=json` + "`" + `",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/handler.APIResponse"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "cookies": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "$ref": "#/definitions/model.Cookie"
-                                                        }
-                                                    },
-                                                    "user_id": {
-                                                        "type": "integer"
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/handler.APIResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/handler.APIResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/handler.APIResponse"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
-            }
-        },
         "/admin/users": {
             "post": {
-                "description": "Creates new users. The 'role' field must be either 'admin' or 'user'. The system enforces a singleton admin policy; this endpoint will fail if an admin user already exists and a new one is requested. Only accessible by admins.",
+                "description": "Creates new users based on the request body array. Each object in the array can specify a remark.",
                 "consumes": [
                     "application/json"
                 ],
@@ -122,21 +35,21 @@ const docTemplate = `{
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Create one or more users",
+                "summary": "[Admin] Create one or more users",
                 "parameters": [
                     {
-                        "description": "Request body",
+                        "description": "Array of users to create. Can be empty to create one default user.",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "properties": {
-                                "count": {
-                                    "type": "integer"
-                                },
-                                "role": {
-                                    "type": "string"
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "remark": {
+                                        "type": "string"
+                                    }
                                 }
                             }
                         }
@@ -144,7 +57,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "201": {
-                        "description": "Created",
+                        "description": "Returns an array of created users including their new API keys.",
                         "schema": {
                             "allOf": [
                                 {
@@ -156,99 +69,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/model.User"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/handler.APIResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/handler.APIResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict if admin user already exists",
-                        "schema": {
-                            "$ref": "#/definitions/handler.APIResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/handler.APIResponse"
-                        }
-                    }
-                },
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ]
-            },
-            "delete": {
-                "description": "Deletes users by their IDs or API keys. Only accessible by admins.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin"
-                ],
-                "summary": "Delete one or more users",
-                "parameters": [
-                    {
-                        "description": "User IDs or API Keys to delete",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "api_keys": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
-                                },
-                                "user_ids": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "integer"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/handler.APIResponse"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "object",
-                                            "properties": {
-                                                "total_deleted": {
-                                                    "type": "integer"
-                                                }
+                                                "$ref": "#/definitions/handler.AdminUserResponse"
                                             }
                                         }
                                     }
@@ -277,14 +98,14 @@ const docTemplate = `{
                 },
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "AdminKeyAuth": []
                     }
                 ]
             }
         },
-        "/admin/users/keys": {
+        "/admin/users/by-key/{apiKey}": {
             "put": {
-                "description": "Generates new API keys for a list of user IDs. Only accessible by admins.",
+                "description": "Updates a user's details, such as their remark, by finding them via API key.",
                 "consumes": [
                     "application/json"
                 ],
@@ -294,24 +115,80 @@ const docTemplate = `{
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Refresh API keys for users",
+                "summary": "[Admin] Update user by API key",
                 "parameters": [
                     {
-                        "description": "User IDs to refresh",
+                        "type": "string",
+                        "description": "User API Key",
+                        "name": "apiKey",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "User details to update",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "user_ids": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "integer"
-                                    }
+                                "remark": {
+                                    "type": "string"
                                 }
                             }
                         }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "AdminKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/admin/users/by-key/{apiKey}/refresh-key": {
+            "post": {
+                "description": "Generates a new API key for the specified user and returns the full updated user object.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "[Admin] Refresh user API key by API key",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User API Key",
+                        "name": "apiKey",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -326,10 +203,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/model.User"
-                                            }
+                                            "$ref": "#/definitions/handler.AdminUserResponse"
                                         }
                                     }
                                 }
@@ -357,47 +231,62 @@ const docTemplate = `{
                 },
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "AdminKeyAuth": []
                     }
                 ]
             }
         },
-        "/auth/refresh-key": {
-            "post": {
-                "description": "Invalidates the current API key and returns a new one.",
+        "/admin/users/{id}": {
+            "put": {
+                "description": "Updates a user's details, such as their remark.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Auth"
+                    "Admin"
                 ],
-                "summary": "Refresh own API key",
+                "summary": "[Admin] Update user by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "User details to update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "remark": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/handler.APIResponse"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "object",
-                                            "properties": {
-                                                "new_api_key": {
-                                                    "type": "string"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
+                            "$ref": "#/definitions/handler.APIResponse"
                         }
                     },
-                    "401": {
-                        "description": "Unauthorized",
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/handler.APIResponse"
                         }
@@ -411,7 +300,71 @@ const docTemplate = `{
                 },
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "AdminKeyAuth": []
+                    }
+                ]
+            }
+        },
+        "/admin/users/{id}/refresh-key": {
+            "post": {
+                "description": "Generates a new API key for the specified user and returns the full updated user object.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "[Admin] Refresh user API key by ID",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/handler.AdminUserResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "AdminKeyAuth": []
                     }
                 ]
             }
@@ -665,6 +618,87 @@ const docTemplate = `{
                 ]
             }
         },
+        "/pool/cookies/{domain}": {
+            "get": {
+                "description": "Retrieves all sharable cookies for a given domain from users who have opted into sharing.\nThis endpoint is protected by a dedicated Pool Access Key (` + "`" + `x-pool-key` + "`" + ` header), not a user's API key.\nBy default, returns an array of strings, where each string is a user's cookies formatted as an HTTP 'Cookie' header.\nUse ` + "`" + `?format=json` + "`" + ` to get a structured JSON response, where each element contains the user's ID and their list of cookies.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pool"
+                ],
+                "summary": "Get sharable cookies by domain",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "The domain to fetch cookies for",
+                        "name": "domain",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "json"
+                        ],
+                        "type": "string",
+                        "description": "Output format",
+                        "name": "format",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "JSON response with ` + "`" + `?format=json` + "`" + `",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/handler.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "cookies": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "$ref": "#/definitions/model.Cookie"
+                                                        }
+                                                    },
+                                                    "user_id": {
+                                                        "type": "integer"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handler.APIResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "PoolKeyAuth": []
+                    }
+                ]
+            }
+        },
         "/sync": {
             "post": {
                 "description": "Receives a list of cookies from the browser extension. It then performs an atomic \"replace\" operation: all existing cookies for that user are deleted, and the new list is inserted. Finally, it returns the full updated list of cookies for the user.",
@@ -868,6 +902,32 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.AdminUserResponse": {
+            "type": "object",
+            "properties": {
+                "api_key": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_synced_at": {
+                    "type": "string"
+                },
+                "remark": {
+                    "type": "string"
+                },
+                "sharing_enabled": {
+                    "type": "boolean"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "model.Cookie": {
             "type": "object",
             "properties": {
@@ -909,32 +969,22 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
-        },
-        "model.User": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "role": {
-                    "type": "string"
-                },
-                "sharing_enabled": {
-                    "type": "boolean"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
         }
     },
     "securityDefinitions": {
+        "AdminKeyAuth": {
+            "type": "apiKey",
+            "name": "x-admin-key",
+            "in": "header"
+        },
         "ApiKeyAuth": {
             "type": "apiKey",
             "name": "x-api-key",
+            "in": "header"
+        },
+        "PoolKeyAuth": {
+            "type": "apiKey",
+            "name": "x-pool-key",
             "in": "header"
         }
     }

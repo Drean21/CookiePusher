@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cookie-syncer/api/internal/config"
 	"cookie-syncer/api/internal/handler"
 	"cookie-syncer/api/internal/router"
 	"cookie-syncer/api/internal/store/sqlitestore"
@@ -29,12 +30,23 @@ const dbFileName = "cookiesyncer.db?_busy_timeout=5000"
 // @securityDefinitions.apiKey ApiKeyAuth
 // @in              header
 // @name            x-api-key
+//
+// @securityDefinitions.apiKey PoolKeyAuth
+// @in              header
+// @name            x-pool-key
+//
+// @securityDefinitions.apiKey AdminKeyAuth
+// @in              header
+// @name            x-admin-key
 func main() {
 	// Configure zerolog for pretty console output
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 
+	// Load application configuration
+	cfg := config.Load()
+
 	// Initialize a new SQLite store. The _busy_timeout parameter is crucial for handling concurrent requests.
-	db, err := sqlitestore.New(dbFileName)
+	db, err := sqlitestore.New(dbFileName, cfg.AdminKey, cfg.PoolAccessKey)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize database")
 	}
@@ -42,7 +54,7 @@ func main() {
 
 	// Create a new router and pass the store to it.
 	lockManager := handler.NewUserLockManager()
-	mux := router.NewRouter(db, lockManager)
+	mux := router.NewRouter(db, lockManager, cfg)
 	
 	// Print all registered routes
 	router.PrintRoutes(mux)

@@ -130,16 +130,21 @@ func GetCookieValueHandler(db store.Store) http.HandlerFunc {
 		domain := chi.URLParam(r, "domain")
 		name := chi.URLParam(r, "name")
 
-		cookie, err := db.GetCookieByName(user.ID, domain, name)
+		// With the new storage model, it's more efficient to get all cookies for the domain
+		// and then filter by name in the application.
+		cookies, err := db.GetCookiesByDomain(user.ID, domain)
 		if err != nil {
-			if err.Error() == "cookie not found" {
-				RespondWithError(w, http.StatusNotFound, "Cookie not found")
-			} else {
-				RespondWithError(w, http.StatusInternalServerError, "Internal server error")
-			}
+			RespondWithError(w, http.StatusInternalServerError, "Could not retrieve cookies for domain")
 			return
 		}
 
-		RespondWithJSON(w, http.StatusOK, "Successfully retrieved cookie value", cookie.Value)
+		for _, cookie := range cookies {
+			if cookie.Name == name {
+				RespondWithJSON(w, http.StatusOK, "Successfully retrieved cookie value", cookie.Value)
+				return
+			}
+		}
+
+		RespondWithError(w, http.StatusNotFound, "Cookie not found")
 	}
 }

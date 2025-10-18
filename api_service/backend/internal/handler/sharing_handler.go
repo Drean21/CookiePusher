@@ -74,22 +74,22 @@ func GetUserSettingsHandler(db store.Store) http.HandlerFunc {
 	}
 }
 
-// GetSharableCookiesHandler handles fetching sharable cookies for a domain.
-// @Summary      [Admin] Get sharable cookies by domain, grouped by user
-// @Description  (Admin-only) Retrieves all sharable cookies for a given domain, grouped by the user who shared them.
+// GetSharableCookiesHandler handles fetching sharable cookies for a domain from the public pool.
+// @Summary      Get sharable cookies by domain
+// @Description  Retrieves all sharable cookies for a given domain from users who have opted into sharing.
+// @Description  This endpoint is protected by a dedicated Pool Access Key (`x-pool-key` header), not a user's API key.
 // @Description  By default, returns an array of strings, where each string is a user's cookies formatted as an HTTP 'Cookie' header.
 // @Description  Use `?format=json` to get a structured JSON response, where each element contains the user's ID and their list of cookies.
-// @Tags         Admin
+// @Tags         Pool
 // @Produce      json
 // @Param        domain   path      string  true   "The domain to fetch cookies for"
 // @Param        format   query     string  false  "Output format"  Enums(json)
 // @Success      200      {object}  handler.APIResponse{data=[]string} "Default response: Array of HTTP Cookie header strings"
 // @Success      200      {object}  handler.APIResponse{data=[]object{user_id=int,cookies=[]model.Cookie}} "JSON response with `?format=json`"
 // @Failure      401      {object}  handler.APIResponse "Unauthorized"
-// @Failure      403      {object}  handler.APIResponse "Forbidden"
 // @Failure      500      {object}  handler.APIResponse "Internal Server Error"
-// @Security     ApiKeyAuth
-// @Router       /admin/pool/cookies/{domain} [get]
+// @Security     PoolKeyAuth
+// @Router       /pool/cookies/{domain} [get]
 func GetSharableCookiesHandler(db store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		domain := chi.URLParam(r, "domain")

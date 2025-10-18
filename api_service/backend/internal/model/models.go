@@ -6,10 +6,11 @@ import "time"
 type User struct {
 	ID             int64     `json:"id"`
 	APIKey         string    `json:"-"` // API Key is sensitive, "-" prevents it from being marshalled into JSON
-	Role           string    `json:"role"`
-	SharingEnabled bool      `json:"sharing_enabled"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	Remark         *string   `json:"remark,omitempty"`
+	SharingEnabled bool       `json:"sharing_enabled"`
+	LastSyncedAt   *time.Time `json:"last_synced_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 // Cookie represents a cookie synced by a user.

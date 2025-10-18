@@ -54,24 +54,58 @@ func UserFromContext(ctx context.Context) *model.User {
 	return user
 }
 
-// AdminOnlyMiddleware is a middleware to ensure only users with the 'admin' role can proceed.
-// It must be used AFTER the AuthMiddleware.
-func AdminOnlyMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user := UserFromContext(r.Context())
-		if user == nil {
-			// This should not happen if AuthMiddleware is used before this.
-			RespondWithError(w, http.StatusInternalServerError, "Could not identify user")
-			return
-		}
+// PoolKeyAuthMiddleware returns a middleware that checks for a valid pool access key.
+func PoolKeyAuthMiddleware(expectedKey string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if expectedKey == "" {
+				log.Printf("[Auth Error] Pool access key is not configured on the server. Access to pool denied.")
+				RespondWithError(w, http.StatusInternalServerError, "Pool access is not configured")
+				return
+			}
 
-		if user.Role != "admin" {
-			RespondWithError(w, http.StatusForbidden, "Forbidden: Administrator access required")
-			return
-		}
+			poolKey := r.Header.Get("x-pool-key")
+			if poolKey == "" {
+				RespondWithError(w, http.StatusUnauthorized, "x-pool-key header required")
+				return
+			}
 
-		next.ServeHTTP(w, r)
-	})
+			if poolKey != expectedKey {
+				log.Printf("[Auth Failed] Pool middleware rejected request. Reason: invalid pool key.")
+				RespondWithError(w, http.StatusUnauthorized, "Invalid Pool Key")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// AdminKeyAuthMiddleware returns a middleware that checks for a valid admin key.
+func AdminKeyAuthMiddleware(expectedKey string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if expectedKey == "" {
+				log.Printf("[Auth Error] Admin key is not configured on the server. Access to admin endpoints denied.")
+				RespondWithError(w, http.StatusInternalServerError, "Admin access is not configured")
+				return
+			}
+
+			adminKey := r.Header.Get("x-admin-key")
+			if adminKey == "" {
+				RespondWithError(w, http.StatusUnauthorized, "x-admin-key header required")
+				return
+			}
+
+			if adminKey != expectedKey {
+				log.Printf("[Auth Failed] Admin middleware rejected request. Reason: invalid admin key.")
+				RespondWithError(w, http.StatusForbidden, "Forbidden: Invalid Admin Key")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // AuthTestHandler is a simple handler to confirm that a token is valid.
@@ -85,5 +119,5 @@ func AdminOnlyMiddleware(next http.Handler) http.Handler {
 // @Router       /auth/test [get]
 func AuthTestHandler(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
-	RespondWithJSON(w, http.StatusOK, "Token is valid", map[string]interface{}{"user_id": user.ID, "role": user.Role})
+	RespondWithJSON(w, http.StatusOK, "Token is valid", map[string]interface{}{"user_id": user.ID})
 }

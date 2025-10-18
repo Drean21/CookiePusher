@@ -1,6 +1,7 @@
 package router
 
 import (
+	"cookie-syncer/api/internal/config"
 	"cookie-syncer/api/internal/handler"
 	"cookie-syncer/api/internal/store"
 	"fmt"
@@ -14,7 +15,7 @@ import (
 )
 
 // NewRouter creates and configures a new HTTP router using chi.
-func NewRouter(db store.Store, locker *handler.UserLockManager) *chi.Mux {
+func NewRouter(db store.Store, locker *handler.UserLockManager, cfg *config.Config) *chi.Mux {
 	r := chi.NewRouter()
 
 	// A good base middleware stack
@@ -27,6 +28,9 @@ func NewRouter(db store.Store, locker *handler.UserLockManager) *chi.Mux {
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	// Swagger documentation
+	r.Get("/swagger", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/swagger/", http.StatusMovedPermanently)
+	})
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	// Unauthenticated routes
@@ -40,7 +44,6 @@ func NewRouter(db store.Store, locker *handler.UserLockManager) *chi.Mux {
 
 		r.Post("/api/v1/sync", handler.SyncHandler(db, locker))
 		r.Get("/api/v1/auth/test", handler.AuthTestHandler)
-		r.Post("/api/v1/auth/refresh-key", handler.RefreshSelfAPIKeyHandler(db))
 		r.Get("/api/v1/cookies/all", handler.GetAllCookiesHandler(db))
 		r.Get("/api/v1/cookies/{domain}", handler.GetDomainCookiesHandler(db))
 		r.Get("/api/v1/cookies/{domain}/{name}", handler.GetCookieValueHandler(db))
@@ -48,18 +51,23 @@ func NewRouter(db store.Store, locker *handler.UserLockManager) *chi.Mux {
 		r.Put("/api/v1/user/settings", handler.UpdateUserSettingsHandler(db))
 	})
 
-	// Admin-only routes group
-	adminRouter := chi.NewRouter()
-	adminRouter.Use(handler.AuthMiddleware(db))
-	adminRouter.Use(handler.AdminOnlyMiddleware)
-	adminRouter.Post("/users", handler.CreateUsersHandler(db))
-	adminRouter.Delete("/users", handler.DeleteUsersHandler(db))
-	adminRouter.Put("/users/keys", handler.AdminRefreshAPIKeysHandler(db))
-	// Correctly place the sharable cookies endpoint under admin protection
-	adminRouter.Get("/pool/cookies/{domain}", handler.GetSharableCookiesHandler(db))
+	// Pool API for shared cookies, protected by a separate key
+	r.Group(func(r chi.Router) {
+		// This middleware will check for the X-Pool-Key header
+		r.Use(handler.PoolKeyAuthMiddleware(cfg.PoolAccessKey))
+		r.Get("/api/v1/pool/cookies/{domain}", handler.GetSharableCookiesHandler(db))
+	})
 
-	// Mount the admin router under the /api/v1/admin prefix
-	r.Mount("/api/v1/admin", adminRouter)
+	// Admin-only routes group, protected by a separate key
+	r.Group(func(r chi.Router) {
+		r.Use(handler.AdminKeyAuthMiddleware(cfg.AdminKey))
+
+		r.Post("/api/v1/admin/users", handler.AdminCreateUsersHandler(db, cfg))
+		r.Put("/api/v1/admin/users/{id}", handler.AdminUpdateUserHandler(db))
+		r.Put("/api/v1/admin/users/by-key/{apiKey}", handler.AdminUpdateUserByAPIKeyHandler(db))
+		r.Post("/api/v1/admin/users/{id}/refresh-key", handler.AdminRefreshUserAPIKeyHandler(db))
+		r.Post("/api/v1/admin/users/by-key/{apiKey}/refresh-key", handler.AdminRefreshUserAPIKeyByAPIKeyHandler(db))
+	})
 
 	return r
 }

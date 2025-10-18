@@ -8,6 +8,23 @@ definitions:
       message:
         type: string
     type: object
+  handler.AdminUserResponse:
+    properties:
+      api_key:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      last_synced_at:
+        type: string
+      remark:
+        type: string
+      sharing_enabled:
+        type: boolean
+      updated_at:
+        type: string
+    type: object
   model.Cookie:
     properties:
       domain:
@@ -36,19 +53,6 @@ definitions:
       value:
         type: string
     type: object
-  model.User:
-    properties:
-      created_at:
-        type: string
-      id:
-        type: integer
-      role:
-        type: string
-      sharing_enabled:
-        type: boolean
-      updated_at:
-        type: string
-    type: object
 host: localhost:8080
 info:
   contact:
@@ -62,97 +66,38 @@ info:
   title: Cookie Syncer API
   version: "1.0"
 paths:
-  /admin/pool/cookies/{domain}:
-    get:
-      description: |-
-        (Admin-only) Retrieves all sharable cookies for a given domain, grouped by the user who shared them.
-        By default, returns an array of strings, where each string is a user's cookies formatted as an HTTP 'Cookie' header.
-        Use `?format=json` to get a structured JSON response, where each element contains the user's ID and their list of cookies.
+  /admin/users:
+    post:
+      consumes:
+      - application/json
+      description: Creates new users based on the request body array. Each object
+        in the array can specify a remark.
       parameters:
-      - description: The domain to fetch cookies for
-        in: path
-        name: domain
+      - description: Array of users to create. Can be empty to create one default
+          user.
+        in: body
+        name: body
         required: true
-        type: string
-      - description: Output format
-        enum:
-        - json
-        in: query
-        name: format
-        type: string
+        schema:
+          items:
+            properties:
+              remark:
+                type: string
+            type: object
+          type: array
       produces:
       - application/json
       responses:
-        "200":
-          description: JSON response with `?format=json`
+        "201":
+          description: Returns an array of created users including their new API keys.
           schema:
             allOf:
             - $ref: '#/definitions/handler.APIResponse'
             - properties:
                 data:
                   items:
-                    properties:
-                      cookies:
-                        items:
-                          $ref: '#/definitions/model.Cookie'
-                        type: array
-                      user_id:
-                        type: integer
-                    type: object
+                    $ref: '#/definitions/handler.AdminUserResponse'
                   type: array
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/handler.APIResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/handler.APIResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/handler.APIResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: '[Admin] Get sharable cookies by domain, grouped by user'
-      tags:
-      - Admin
-  /admin/users:
-    delete:
-      consumes:
-      - application/json
-      description: Deletes users by their IDs or API keys. Only accessible by admins.
-      parameters:
-      - description: User IDs or API Keys to delete
-        in: body
-        name: body
-        required: true
-        schema:
-          properties:
-            api_keys:
-              items:
-                type: string
-              type: array
-            user_ids:
-              items:
-                type: integer
-              type: array
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/handler.APIResponse'
-            - properties:
-                data:
-                  properties:
-                    total_deleted:
-                      type: integer
-                  type: object
               type: object
         "400":
           description: Bad Request
@@ -167,41 +112,75 @@ paths:
           schema:
             $ref: '#/definitions/handler.APIResponse'
       security:
-      - ApiKeyAuth: []
-      summary: Delete one or more users
+      - AdminKeyAuth: []
+      summary: '[Admin] Create one or more users'
       tags:
       - Admin
-    post:
+  /admin/users/{id}:
+    put:
       consumes:
       - application/json
-      description: Creates new users. The 'role' field must be either 'admin' or 'user'.
-        The system enforces a singleton admin policy; this endpoint will fail if an
-        admin user already exists and a new one is requested. Only accessible by admins.
+      description: Updates a user's details, such as their remark.
       parameters:
-      - description: Request body
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: User details to update
         in: body
         name: body
         required: true
         schema:
           properties:
-            count:
-              type: integer
-            role:
+            remark:
               type: string
           type: object
       produces:
       - application/json
       responses:
-        "201":
-          description: Created
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - AdminKeyAuth: []
+      summary: '[Admin] Update user by ID'
+      tags:
+      - Admin
+  /admin/users/{id}/refresh-key:
+    post:
+      description: Generates a new API key for the specified user and returns the
+        full updated user object.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
           schema:
             allOf:
             - $ref: '#/definitions/handler.APIResponse'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/model.User'
-                  type: array
+                  $ref: '#/definitions/handler.AdminUserResponse'
               type: object
         "400":
           description: Bad Request
@@ -211,36 +190,35 @@ paths:
           description: Forbidden
           schema:
             $ref: '#/definitions/handler.APIResponse'
-        "409":
-          description: Conflict if admin user already exists
-          schema:
-            $ref: '#/definitions/handler.APIResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/handler.APIResponse'
       security:
-      - ApiKeyAuth: []
-      summary: Create one or more users
+      - AdminKeyAuth: []
+      summary: '[Admin] Refresh user API key by ID'
       tags:
       - Admin
-  /admin/users/keys:
+  /admin/users/by-key/{apiKey}:
     put:
       consumes:
       - application/json
-      description: Generates new API keys for a list of user IDs. Only accessible
-        by admins.
+      description: Updates a user's details, such as their remark, by finding them
+        via API key.
       parameters:
-      - description: User IDs to refresh
+      - description: User API Key
+        in: path
+        name: apiKey
+        required: true
+        type: string
+      - description: User details to update
         in: body
         name: body
         required: true
         schema:
           properties:
-            user_ids:
-              items:
-                type: integer
-              type: array
+            remark:
+              type: string
           type: object
       produces:
       - application/json
@@ -248,13 +226,45 @@ paths:
         "200":
           description: OK
           schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - AdminKeyAuth: []
+      summary: '[Admin] Update user by API key'
+      tags:
+      - Admin
+  /admin/users/by-key/{apiKey}/refresh-key:
+    post:
+      description: Generates a new API key for the specified user and returns the
+        full updated user object.
+      parameters:
+      - description: User API Key
+        in: path
+        name: apiKey
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
             allOf:
             - $ref: '#/definitions/handler.APIResponse'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/model.User'
-                  type: array
+                  $ref: '#/definitions/handler.AdminUserResponse'
               type: object
         "400":
           description: Bad Request
@@ -269,41 +279,10 @@ paths:
           schema:
             $ref: '#/definitions/handler.APIResponse'
       security:
-      - ApiKeyAuth: []
-      summary: Refresh API keys for users
+      - AdminKeyAuth: []
+      summary: '[Admin] Refresh user API key by API key'
       tags:
       - Admin
-  /auth/refresh-key:
-    post:
-      description: Invalidates the current API key and returns a new one.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/handler.APIResponse'
-            - properties:
-                data:
-                  properties:
-                    new_api_key:
-                      type: string
-                  type: object
-              type: object
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/handler.APIResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/handler.APIResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Refresh own API key
-      tags:
-      - Auth
   /auth/test:
     get:
       description: A simple endpoint to check if the provided API key in the `x-api-key`
@@ -456,6 +435,59 @@ paths:
       summary: Get all cookies
       tags:
       - Cookies
+  /pool/cookies/{domain}:
+    get:
+      description: |-
+        Retrieves all sharable cookies for a given domain from users who have opted into sharing.
+        This endpoint is protected by a dedicated Pool Access Key (`x-pool-key` header), not a user's API key.
+        By default, returns an array of strings, where each string is a user's cookies formatted as an HTTP 'Cookie' header.
+        Use `?format=json` to get a structured JSON response, where each element contains the user's ID and their list of cookies.
+      parameters:
+      - description: The domain to fetch cookies for
+        in: path
+        name: domain
+        required: true
+        type: string
+      - description: Output format
+        enum:
+        - json
+        in: query
+        name: format
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: JSON response with `?format=json`
+          schema:
+            allOf:
+            - $ref: '#/definitions/handler.APIResponse'
+            - properties:
+                data:
+                  items:
+                    properties:
+                      cookies:
+                        items:
+                          $ref: '#/definitions/model.Cookie'
+                        type: array
+                      user_id:
+                        type: integer
+                    type: object
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.APIResponse'
+      security:
+      - PoolKeyAuth: []
+      summary: Get sharable cookies by domain
+      tags:
+      - Pool
   /sync:
     post:
       consumes:
@@ -576,8 +608,16 @@ paths:
       tags:
       - User
 securityDefinitions:
+  AdminKeyAuth:
+    in: header
+    name: x-admin-key
+    type: apiKey
   ApiKeyAuth:
     in: header
     name: x-api-key
+    type: apiKey
+  PoolKeyAuth:
+    in: header
+    name: x-pool-key
     type: apiKey
 swagger: "2.0"
