@@ -144,6 +144,12 @@
                   只显示已推送
                 </label>
               </div>
+              <div class="filter-item">
+                <label>
+                  <input type="checkbox" v-model="showOnlySharable" />
+                  只显示已共享
+                </label>
+              </div>
             </div>
           </div>
           <!-- START: Headers for the cookie list -->
@@ -169,6 +175,9 @@
                   <span class="cookie-domain-badge">{{ cookie.domain }}</span>
                 </div>
                 <span class="cookie-value-small">{{ cookie.value }}</span>
+                <div v-if="getRemark(cookie)" class="cookie-remark">
+                  <span>注:</span> {{ getRemark(cookie) }}
+                </div>
               </div>
               <div class="cookie-actions">
                 <!-- Remark Button -->
@@ -279,6 +288,7 @@ const activeDomainCopyMenu = ref<string | null>(null);
 const activeCopyMenu = ref<string | null>(null);
 const showOnlySelected = ref(false);
 const showOnlyInSync = ref(false);
+const showOnlySharable = ref(false);
 const selectedSubDomain = ref("all");
 
 const getCookieKey = (cookie: Cookie): string =>
@@ -362,6 +372,9 @@ const filteredCookies = computed(() => {
   if (showOnlyInSync.value) {
     cookies = cookies.filter((c) => isCookieInSyncList(c));
   }
+  if (showOnlySharable.value) {
+    cookies = cookies.filter((c) => isCookieSharable(c));
+  }
   return cookies;
 });
 
@@ -410,6 +423,8 @@ const selectDomain = async (domain: string) => {
   selectedCookies.value.clear();
   searchQuery.value = "";
   showOnlySelected.value = false;
+  showOnlyInSync.value = false;
+  showOnlySharable.value = false;
   selectedSubDomain.value = "all";
   loadingCookies.value = true;
   cookiesForSelectedDomain.value = [];
@@ -984,5 +999,17 @@ input:checked + .slider:before {
 .cookie-actions-header span {
   width: 34px; /* Match .switch width */
   text-align: center;
+}
+.cookie-remark {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #c55a11; /* A distinct but not overly bright color */
+  padding: 3px 6px;
+  background-color: #fcf2e8;
+  border-radius: 4px;
+  display: inline-block; /* Or block if you want it on its own line */
+}
+.cookie-remark span {
+  font-weight: bold;
 }
 </style>
