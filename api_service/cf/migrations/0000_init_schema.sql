@@ -1,25 +1,23 @@
--- Migration number: 0001
--- Created at: 2024-04-05 14:00:00
--- Description: Create the users table and link it to the cookies table.
+-- CookieSyncer Final Schema (Squashed Migration)
+-- This single file creates the final, definitive database schema for the application.
 
--- CreateTable: Users
+-- Drop tables if they exist to ensure a clean start.
+DROP TABLE IF EXISTS `cookies`;
+DROP TABLE IF EXISTS `users`;
+
+-- Create the `users` table with all necessary fields, including the hybrid storage optimization.
 CREATE TABLE `users` (
     `id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    `api_key` TEXT NOT NULL,
-    `role` TEXT NOT NULL,
+    `api_key` TEXT NOT NULL UNIQUE,
+    `remark` TEXT,
     `sharing_enabled` INTEGER NOT NULL DEFAULT 0,
+    `cookies_json` TEXT,
+    `last_synced_at` TEXT,
     `created_at` TEXT NOT NULL,
     `updated_at` TEXT NOT NULL
 );
 
--- CreateIndex: Unique API Key for Users
-CREATE UNIQUE INDEX `users_api_key_key` ON `users`(`api_key`);
-
--- ModifyTable: Add user_id to cookies table
--- D1 does not support ADD COLUMN with FOREIGN KEY directly.
--- We must recreate the table. This is safe as the DB is currently empty.
-DROP TABLE `cookies`;
-
+-- Create the `cookies` table, which serves as a normalized representation for complex queries (e.g., sharing).
 CREATE TABLE `cookies` (
     `id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     `user_id` INTEGER NOT NULL,
@@ -27,7 +25,7 @@ CREATE TABLE `cookies` (
     `name` TEXT NOT NULL,
     `value` TEXT NOT NULL,
     `path` TEXT NOT NULL,
-    `expires` INTEGER,
+    `expires` TEXT,
     `http_only` INTEGER NOT NULL DEFAULT 0,
     `secure` INTEGER NOT NULL DEFAULT 0,
     `same_site` TEXT NOT NULL,
@@ -36,5 +34,6 @@ CREATE TABLE `cookies` (
     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
--- CreateIndex: Adjust unique constraint to be per-user
+-- Create necessary indexes for performance.
+CREATE UNIQUE INDEX `users_api_key_key` ON `users`(`api_key`);
 CREATE UNIQUE INDEX `cookies_user_id_domain_name_path_key` ON `cookies`(`user_id`, `domain`, `name`, `path`);

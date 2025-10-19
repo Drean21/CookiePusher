@@ -7,8 +7,7 @@
         "deploy": "wrangler deploy",
         "d1:create": "wrangler d1 create cookie-syncer-db",
         "d1:migrate": "wrangler d1 migrations apply cookie-syncer-db --local",
-        "d1:migrate:prod": "wrangler d1 migrations apply cookie-syncer-db --remote",
-        "user:ensure": "tsx src/scripts/ensure-user.ts"
+        "d1:migrate:prod": "wrangler d1 migrations apply cookie-syncer-db --remote"
     },
     "devDependencies": {
         "@cloudflare/workers-types": "^4.20240405.0",
