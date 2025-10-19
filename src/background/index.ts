@@ -293,11 +293,11 @@ function scheduleSync() {
         clearTimeout(syncDebounceTimer);
     } else {
         // Only log when a new debounce window starts.
-        addLog(`同步窗口已开启，将在 ${debounceInterval / 1000} 秒后合并所有变更。`, 'info');
+        addLog(`变更暂存窗口已开启，将在 ${debounceInterval / 1000} 秒后触发一次完整的云端推送。`, 'info');
     }
 
     syncDebounceTimer = setTimeout(() => {
-        addLog('变更合并窗口结束，触发云端推送。', 'info');
+        addLog('变更暂存窗口结束，开始执行云端推送。', 'info');
         triggerFullSync().catch(() => { /* Errors are handled inside */ });
         syncDebounceTimer = null; // Clear the timer reference after execution
     }, debounceInterval);
@@ -325,14 +325,49 @@ async function triggerFullSync() {
         const listToSync = Array.from(combinedMap.values());
 
         if (listToSync.length === 0) {
-            addLog("推送列表为空，跳过云端推送。", 'info');
+            addLog("本地推送列表为空，跳过云端推送。", 'info');
             await chrome.storage.local.remove(SYNC_QUEUE_STORAGE_KEY); // Clear any old queue
             return;
         }
+        
+        // --- Start: Pre-push Validation ---
+        const validatedList: Cookie[] = [];
+        const ghostKeys = new Set<string>();
 
-        // Place the final list into the queue before attempting to sync
-        await chrome.storage.local.set({ [SYNC_QUEUE_STORAGE_KEY]: listToSync });
-        // --- End: Queueing Logic ---
+        for (const cookie of listToSync) {
+            try {
+                const liveCookie = await chrome.cookies.get({ url: `https://${cookie.domain.replace(/^\./, '')}/`, name: cookie.name });
+                if (liveCookie) {
+                    // Cookie exists, update with the latest value before pushing
+                    validatedList.push({ ...cookie, ...liveCookie });
+                } else {
+                    // This is a "ghost cookie", mark for removal
+                    ghostKeys.add(getCookieKey(cookie));
+                }
+            } catch (e: any) {
+                // Error during validation, treat as a ghost for safety
+                ghostKeys.add(getCookieKey(cookie));
+                addLog(`验证Cookie "${cookie.name}" 时出错: ${e.message}`, 'error');
+            }
+        }
+
+        if (ghostKeys.size > 0) {
+            addLog(`推送前验证发现并移除了 ${ghostKeys.size} 个无效的“幽灵Cookie”。`, 'info');
+            // Permanently remove ghosts from the authoritative syncList
+            const { [SYNC_LIST_STORAGE_KEY]: currentSyncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
+            const cleanedSyncList = currentSyncList.filter(c => !ghostKeys.has(getCookieKey(c)));
+            await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: cleanedSyncList });
+        }
+        
+        if (validatedList.length === 0) {
+            addLog("所有待推送的Cookie均已失效，本次推送中止。", 'info');
+            await chrome.storage.local.remove(SYNC_QUEUE_STORAGE_KEY);
+            return;
+        }
+        // --- End: Pre-push Validation ---
+
+        // Place the final validated list into the queue before attempting to sync
+        await chrome.storage.local.set({ [SYNC_QUEUE_STORAGE_KEY]: validatedList });
 
         const syncUrl = new URL(apiEndpoint);
         syncUrl.pathname = '/api/v1/sync';
@@ -340,28 +375,28 @@ async function triggerFullSync() {
         const response = await fetch(syncUrl.toString(), {
             method: 'POST',
             headers: { 'x-api-key': authToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify(listToSync.map(transformCookieForAPI))
+            body: JSON.stringify(validatedList.map(transformCookieForAPI))
         });
 
         if (!response.ok) {
             const errorBody = await response.text();
-            throw new Error(`推送到云端失败: ${response.status} - ${errorBody}`);
+            throw new Error(`云端推送失败: ${response.status} - ${errorBody}`);
         }
         
         const responseData = await response.json();
 
         if (responseData.code !== 200) {
-            throw new Error(`推送响应格式错误: ${JSON.stringify(responseData)}`);
+            throw new Error(`云端推送接口响应异常: ${JSON.stringify(responseData)}`);
         }
         
-        addLog(`云端推送成功，同步了 ${listToSync.length} 个Cookie。`, 'success');
+        addLog(`云端推送成功。推送了 ${validatedList.length} 个有效的Cookie。`, 'success');
         
         // --- Success: Clear Queue and Retry Alarm ---
         await chrome.storage.local.remove(SYNC_QUEUE_STORAGE_KEY);
         await chrome.alarms.clear(RETRY_ALARM_NAME);
         
     } catch (e: any) {
-        addLog(`云端推送失败: ${e.message}。数据已暂存，将在稍后重试。`, 'error');
+        addLog(`云端推送失败: ${e.message}。列表已暂存，将在稍后自动重试。`, 'error');
         
         // --- Failure: Schedule Retry ---
         chrome.alarms.create(RETRY_ALARM_NAME, {
@@ -374,7 +409,7 @@ async function triggerFullSync() {
 }
 
 async function handleManualSync() {
-    await addLog('手动推送开始...', 'info');
+    await addLog('手动全量推送已触发...', 'info');
     await triggerFullSync();
     return { message: "手动推送已触发。" };
 }
@@ -392,7 +427,7 @@ chrome.cookies.onChanged.addListener(async (changeInfo) => {
 
     if (monitoredCookies.has(key)) {
         // Log every detected change to provide rich feedback, then let the scheduler handle debouncing.
-        addLog(`检测到变更: ${key}，已加入推送队列。`, 'info');
+        addLog(`检测到受监控的Cookie变更: ${key}，变更已暂存。`, 'info');
         try {
             // Immediately update the local list to stage the change
             const { [SYNC_LIST_STORAGE_KEY]: syncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
@@ -463,7 +498,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
         // On install/update, check if a sync was pending
         chrome.storage.local.get(SYNC_QUEUE_STORAGE_KEY, (result) => {
             if (result[SYNC_QUEUE_STORAGE_KEY] && result[SYNC_QUEUE_STORAGE_KEY].length > 0) {
-                addLog('检测到未完成的推送任务，将立即尝试同步。', 'info');
+                addLog('检测到上次未完成的推送任务，将立即重试。', 'info');
                 triggerFullSync().catch(() => {}); // Suppress error, retry is scheduled inside
             }
         });
@@ -518,7 +553,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         }
     } else if (alarm.name === RETRY_ALARM_NAME) {
         try {
-            await addLog('重试警报触发，尝试再次推送暂存的Cookie。', 'info');
+            await addLog('重试任务触发，尝试再次推送暂存的列表。', 'info');
             await triggerFullSync();
         } catch (e: any) {
             // Error is already logged and retry is rescheduled inside triggerFullSync
@@ -650,7 +685,7 @@ async function handleKeepAlivePostTasks() {
     if (updatedCookies.length > 0) {
         try {
             // Log that changes are queued, not immediately synced
-            await addLog(`检测到 ${updatedCookies.length} 个Cookie因保活而更新，已加入推送队列。`, 'info');
+            await addLog(`经后台保活，检测到 ${updatedCookies.length} 个Cookie值发生变化，变更已暂存。`, 'info');
             
             const syncMap = new Map(syncList.map((c: Cookie) => [getCookieKey(c), c]));
             updatedCookies.forEach((c: Cookie) => syncMap.set(getCookieKey(c), c));
