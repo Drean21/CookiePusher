@@ -271,6 +271,7 @@ const managedDomains = ref<{ [key: string]: boolean }>({});
 const selectedDomain = ref<string | null>(null);
 const cookiesForSelectedDomain = ref<Cookie[]>([]);
 const syncListMap = ref<{ [key: string]: Cookie }>({});
+const cookieRemarks = ref<{ [key: string]: string }>({});
 const newDomainInput = ref("");
 const searchQuery = ref("");
 const selectedCookies = ref(new Set<string>());
@@ -295,27 +296,29 @@ const isCookieSelected = (cookie: Cookie): boolean =>
   selectedCookies.value.has(getCookieKey(cookie));
 
 const getRemark = (cookie: Cookie): string => {
-  const syncedCookie = syncListMap.value[getCookieKey(cookie)];
-  return syncedCookie?.remark || "";
+  return cookieRemarks.value[getCookieKey(cookie)] || "";
 };
 
 const editRemark = async (cookie: Cookie) => {
-  if (!isCookieInSyncList(cookie)) {
-    showNotification("请先将Cookie加入推送列表才能添加备注。", "info");
-    return;
-  }
   const currentRemark = getRemark(cookie);
   const newRemark = window.prompt(`为 "${cookie.name}" 添加/编辑备注:`, currentRemark);
 
   if (newRemark !== null && newRemark !== currentRemark) {
     try {
       const cookieKey = getCookieKey(cookie);
-      const response = await sendMessage("updateCookieRemark", { cookieKey, remark: newRemark });
+      const response = await sendMessage("updateCookieRemark", {
+        cookieKey,
+        remark: newRemark,
+      });
       if (response.success) {
         // Optimistically update the local state
-        const newSyncMap = { ...syncListMap.value };
-        newSyncMap[cookieKey].remark = newRemark;
-        syncListMap.value = newSyncMap;
+        const newRemarks = { ...cookieRemarks.value };
+        if (newRemark) {
+          newRemarks[cookieKey] = newRemark;
+        } else {
+          delete newRemarks[cookieKey];
+        }
+        cookieRemarks.value = newRemarks;
         showNotification("备注已更新。", "success", 2000);
       }
     } catch (e: any) {
@@ -603,8 +606,10 @@ const toggleCopyMenu = (cookieKey: string) => {
 
 onMounted(async () => {
   loading.value = true;
-  const { syncList: storedSyncList } = await chrome.storage.local.get("syncList");
+  const { syncList: storedSyncList, cookieRemarks: storedRemarks } =
+    await chrome.storage.local.get(["syncList", "cookieRemarks"]);
   if (storedSyncList) groupAndRenderSyncList(storedSyncList);
+  if (storedRemarks) cookieRemarks.value = storedRemarks;
   loading.value = false;
   // chrome.storage.onChanged.addListener(handleStorageChange);
 });

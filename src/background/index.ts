@@ -8,6 +8,7 @@ import { Cookie } from '../../types/extension';
 
 const LOGS_STORAGE_KEY = 'cookieSyncerLogs';
 const SYNC_LIST_STORAGE_KEY = 'syncList';
+const COOKIE_REMARKS_STORAGE_KEY = 'cookieRemarks';
 const STATS_STORAGE_KEY = 'keepAliveStats';
 const SYNC_QUEUE_STORAGE_KEY = 'syncQueue';
 const MAX_LOGS = 100;
@@ -454,9 +455,10 @@ async function performDataIntegrityCheck() {
     }
 }
 
-chrome.runtime.onInstalled.addListener((details) => {
+chrome.runtime.onInstalled.addListener(async (details) => {
     addLog('插件已安装/更新。', 'info');
     if (details.reason === 'install' || details.reason === 'update') {
+        await migrateRemarksFromSyncList(); // Data migration for remarks
         performDataIntegrityCheck();
         // On install/update, check if a sync was pending
         chrome.storage.local.get(SYNC_QUEUE_STORAGE_KEY, (result) => {
@@ -840,25 +842,65 @@ async function handleUpdateUserSettings(payload: { sharing_enabled: boolean }) {
 
 
 async function handleUpdateCookieRemark(payload: { cookieKey: string; remark: string }) {
-    if (!payload || typeof payload.cookieKey !== 'string' || typeof payload.remark !== 'string') {
+    if (!payload || typeof payload.cookieKey !== 'string') {
         throw new Error('无效的备注更新负载。');
     }
     const { cookieKey, remark } = payload;
-    const { [SYNC_LIST_STORAGE_KEY]: syncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
+    const { [COOKIE_REMARKS_STORAGE_KEY]: remarks = {} } = await chrome.storage.local.get(COOKIE_REMARKS_STORAGE_KEY);
 
-    const cookieIndex = syncList.findIndex(c => getCookieKey(c) === cookieKey);
-    if (cookieIndex === -1) {
-        throw new Error('无法在推送列表中找到要更新备注的Cookie。');
+    if (remark) {
+        remarks[cookieKey] = remark;
+    } else {
+        delete remarks[cookieKey];
     }
 
-    // Update the remark
-    syncList[cookieIndex].remark = remark;
+    await chrome.storage.local.set({ [COOKIE_REMARKS_STORAGE_KEY]: remarks });
 
-    // Save the updated list. No sync is needed as this is a local-only feature.
-    await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: syncList });
+    addLog(`Cookie 备注已更新: ${cookieKey}`, 'info');
+    return { success: true };
+}
 
-    addLog(`Cookie "${syncList[cookieIndex].name}" 的本地备注已更新。`, 'info');
-    return { success: true, updatedCookie: syncList[cookieIndex] };
+
+// =================================================================
+// Data Migration for Remarks
+// =================================================================
+async function migrateRemarksFromSyncList() {
+    const { remarksMigrated } = await chrome.storage.local.get('remarksMigrated');
+    if (remarksMigrated) {
+        return; // Migration already done
+    }
+
+    addLog('开始执行备注数据迁移...', 'info');
+    const { [SYNC_LIST_STORAGE_KEY]: syncList = [] } = await chrome.storage.local.get(SYNC_LIST_STORAGE_KEY) as { syncList: Cookie[] };
+    const { [COOKIE_REMARKS_STORAGE_KEY]: existingRemarks = {} } = await chrome.storage.local.get(COOKIE_REMARKS_STORAGE_KEY);
+
+    let migrationCount = 0;
+    if (syncList && syncList.length > 0) {
+        for (const cookie of syncList) {
+            if (cookie.remark) {
+                const key = getCookieKey(cookie);
+                if (!existingRemarks[key]) {
+                    existingRemarks[key] = cookie.remark;
+                    migrationCount++;
+                }
+                // We can now remove the remark from the syncList item
+                delete cookie.remark;
+            }
+        }
+    }
+
+    if (migrationCount > 0) {
+        await chrome.storage.local.set({
+            [COOKIE_REMARKS_STORAGE_KEY]: existingRemarks,
+            [SYNC_LIST_STORAGE_KEY]: syncList // Save the cleaned syncList
+        });
+        addLog(`成功迁移 ${migrationCount} 条备注。`, 'success');
+    } else {
+        addLog('未发现需要迁移的备注数据。', 'info');
+    }
+
+    // Mark migration as complete
+    await chrome.storage.local.set({ remarksMigrated: true });
 }
 
 
