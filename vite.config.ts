@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => ({
         },
         chunkFileNames: 'chunks/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'index.html' && assetInfo.source.includes('<title>CookieSyncer Offscreen</title>')) {
+          if (assetInfo.name === 'index.html' && assetInfo.source.includes('<title>CookiePusher Offscreen</title>')) {
             return 'offscreen/index.html';
           }
           return 'assets/[name]-[hash].[ext]';

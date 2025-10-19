@@ -1,7 +1,7 @@
 <template>
   <div class="popup-container">
     <header class="popup-header">
-      <h1>CookieSyncer</h1>
+      <h1>CookiePusher</h1>
     </header>
     <main class="popup-content">
       <component :is="activeComponent" />

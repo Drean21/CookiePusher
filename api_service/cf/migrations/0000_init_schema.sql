@@ -1,4 +1,4 @@
--- CookieSyncer Final Schema (Squashed Migration)
+-- CookiePusher Final Schema (Squashed Migration)
 -- This single file creates the final, definitive database schema for the application.
 
 -- Drop tables if they exist to ensure a clean start.

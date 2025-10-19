@@ -1,4 +1,4 @@
-// CookieSyncer 扩展类型定义
+// CookiePusher 扩展类型定义
 
 // 域名配置接口
 export interface DomainConfig {
@@ -80,7 +80,7 @@ export type ExtensionEvent =
 // Chrome扩展API增强类型
 declare global {
   interface Window {
-    CookieSyncer?: CookieSyncerApp;
+    CookiePusher?: CookiePusherApp;
   }
 }
 

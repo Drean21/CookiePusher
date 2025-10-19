@@ -15,7 +15,7 @@ import (
 	_ "modernc.org/sqlite" // Import the pure Go SQLite driver
 )
 
-const dbFileName = "cookiesyncer.db?_busy_timeout=5000"
+const dbFileName = "CookiePusher.db?_busy_timeout=5000"
 
 // @title           Cookie Syncer API
 // @version         1.0

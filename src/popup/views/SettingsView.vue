@@ -25,7 +25,7 @@
             <span>操作日志</span>
             <span class="arrow">></span>
           </li>
-           <li @click="activeSubView = 'sharing'">
+          <li @click="activeSubView = 'sharing'">
             <span>共享池</span>
             <span class="arrow">></span>
           </li>
@@ -33,7 +33,39 @@
             <span>数据管理</span>
             <span class="arrow">></span>
           </li>
+          <li @click="activeSubView = 'about'">
+            <span>关于</span>
+            <span class="arrow">></span>
+          </li>
         </ul>
+      </div>
+
+      <div v-if="activeSubView === 'about'" class="sub-view">
+        <div class="setting-category about-section">
+          <h3>CookiePusher</h3>
+          <p class="tip">
+            一款为开发者和高级用户设计的Cookie同步工具，可将浏览器登录状态（Cookie/Token）自动、单向地推送到您的私有API，轻松实现跨设备、跨程序的无缝续期。
+          </p>
+          <p class="author">作者：cy</p>
+          <a
+            href="https://github.com/Drean21/CookiePusher"
+            target="_blank"
+            class="github-link"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 16 16"
+              width="16"
+              height="16"
+              fill="currentColor"
+            >
+              <path
+                d="M8 0c4.42 0 8 3.58 8 8 0 3.54-2.29 6.53-5.47 7.59-.4.07-.55-.17-.55-.38 0-.19.01-.82.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21-.15.46-.55.38A8.01 8.01 0 0 0 8 0Z"
+              ></path>
+            </svg>
+            <span>在 GitHub 上查看</span>
+          </a>
+        </div>
       </div>
 
       <div v-if="activeSubView === 'data'" class="sub-view">
@@ -92,16 +124,25 @@
       <div v-if="activeSubView === 'sharing'" class="sub-view">
         <div class="setting-item">
           <div class="label-with-switch">
-            <label for="sharing-enabled">启用Cookie共享池 <span v-if="!isOnline" class="offline-indicator">（已离线）</span></label>
+            <label for="sharing-enabled"
+              >启用Cookie共享池
+              <span v-if="!isOnline" class="offline-indicator">（已离线）</span></label
+            >
             <div class="toggle-switch">
               <label class="switch">
-                <input type="checkbox" id="sharing-enabled" v-model="sharingEnabled" @change="updateSharingSettings">
+                <input
+                  type="checkbox"
+                  id="sharing-enabled"
+                  v-model="sharingEnabled"
+                  @change="updateSharingSettings"
+                />
                 <span class="slider round"></span>
               </label>
             </div>
           </div>
           <p class="tip">
-            <strong>请仔细阅读：</strong>启用此功能，即表示您同意将标记为“可共享”的Cookie上传至一个公共池中。这些Cookie可能会被本服务的其他用户用于身份验证或执行操作。虽然我们采取措施保护您的数据，但服务提供方不对因共享Cookie而导致的任何账户安全问题、数据泄露或潜在损失承担责任。如果您不希望承担此风险，请勿开启此功能。
+            <strong>请仔细阅读：</strong
+            >启用此功能，即表示您同意将标记为“可共享”的Cookie上传至一个公共池中。这些Cookie可能会被本服务的其他用户用于身份验证或执行操作。虽然我们采取措施保护您的数据，但服务提供方不对因共享Cookie而导致的任何账户安全问题、数据泄露或潜在损失承担责任。如果您不希望承担此风险，请勿开启此功能。
           </p>
         </div>
       </div>
@@ -116,7 +157,9 @@
             min="1"
             placeholder="输入分钟数，例如 60"
           />
-          <p class="tip">设置后台静默访问网站以刷新Cookie有效期的频率。最小值为 1 分钟。</p>
+          <p class="tip">
+            设置后台静默访问网站以刷新Cookie有效期的频率。最小值为 1 分钟。
+          </p>
         </div>
         <div class="setting-actions">
           <button @click="saveSettings" :disabled="isSaving" class="action-btn primary">
@@ -144,7 +187,7 @@ type ShowNotification = (
 ) => void;
 const showNotification = inject<ShowNotification>("showNotification", () => {});
 
-type SubView = "main" | "sync" | "logs" | "keep-alive" | "data" | "sharing";
+type SubView = "main" | "sync" | "logs" | "keep-alive" | "data" | "sharing" | "about";
 
 const activeSubView = ref<SubView>("main");
 
@@ -161,7 +204,9 @@ const headerTitle = computed(() => {
     case "data":
       return "数据管理";
     case "sharing":
-        return "共享池设置";
+      return "共享池设置";
+    case "about":
+      return "关于";
     default:
       return "设置";
   }
@@ -245,8 +290,10 @@ const exportData = async () => {
     const a = document.createElement("a");
     a.href = url;
     const now = new Date();
-    const dateStr = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}`;
-    a.download = `cookiesyncer-backup-${dateStr}.json`;
+    const dateStr = `${now.getFullYear()}${(now.getMonth() + 1)
+      .toString()
+      .padStart(2, "0")}${now.getDate().toString().padStart(2, "0")}`;
+    a.download = `CookiePusher-backup-${dateStr}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -287,16 +334,18 @@ const importData = () => {
 };
 
 const updateSharingSettings = async () => {
-    try {
-        await sendMessage("updateUserSettings", { sharing_enabled: sharingEnabled.value });
-        await chrome.storage.local.set({ sharingSettings: { enabled: sharingEnabled.value } });
-        isOnline.value = true;
-        showNotification("共享设置已更新！", "success");
-    } catch (e: any) {
-        showNotification(`更新失败: ${e.message}`, "error");
-        // Revert the toggle on failure
-        sharingEnabled.value = !sharingEnabled.value;
-    }
+  try {
+    await sendMessage("updateUserSettings", { sharing_enabled: sharingEnabled.value });
+    await chrome.storage.local.set({
+      sharingSettings: { enabled: sharingEnabled.value },
+    });
+    isOnline.value = true;
+    showNotification("共享设置已更新！", "success");
+  } catch (e: any) {
+    showNotification(`更新失败: ${e.message}`, "error");
+    // Revert the toggle on failure
+    sharingEnabled.value = !sharingEnabled.value;
+  }
 };
 
 const loadInitialSettings = async () => {
@@ -322,20 +371,22 @@ const loadInitialSettings = async () => {
   // Load sharing settings from the backend
   try {
     const response = await sendMessage("getUserSettings");
-    if (response.success && typeof response.data.sharing_enabled === 'boolean') {
+    if (response.success && typeof response.data.sharing_enabled === "boolean") {
       sharingEnabled.value = response.data.sharing_enabled;
-      await chrome.storage.local.set({ sharingSettings: { enabled: sharingEnabled.value } });
+      await chrome.storage.local.set({
+        sharingSettings: { enabled: sharingEnabled.value },
+      });
       isOnline.value = true;
     } else {
-        throw new Error(response.error || "Invalid data from API");
+      throw new Error(response.error || "Invalid data from API");
     }
-  } catch(e: any) {
-      console.warn("Could not fetch initial sharing settings from API:", e.message);
-      const { sharingSettings } = await chrome.storage.local.get("sharingSettings");
-      if (sharingSettings && typeof sharingSettings.enabled === 'boolean') {
-          sharingEnabled.value = sharingSettings.enabled;
-      }
-      isOnline.value = false;
+  } catch (e: any) {
+    console.warn("Could not fetch initial sharing settings from API:", e.message);
+    const { sharingSettings } = await chrome.storage.local.get("sharingSettings");
+    if (sharingSettings && typeof sharingSettings.enabled === "boolean") {
+      sharingEnabled.value = sharingSettings.enabled;
+    }
+    isOnline.value = false;
   }
 };
 
@@ -417,6 +468,30 @@ onMounted(loadInitialSettings);
   font-size: 16px;
   color: #555;
 }
+.about-section {
+  text-align: center;
+}
+.author {
+  font-size: 12px;
+  color: #9e9e9e;
+  margin-top: 16px;
+}
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  text-decoration: none;
+  color: #333;
+  font-weight: 500;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background-color: #f0f2f5;
+  transition: background-color 0.2s;
+}
+.github-link:hover {
+  background-color: #e0e0e0;
+}
 .setting-item {
   display: flex;
   flex-direction: column;
@@ -442,9 +517,9 @@ onMounted(loadInitialSettings);
   margin-top: 8px;
 }
 .offline-indicator {
-    color: #f44336; /* Red color for offline status */
-    font-size: 12px;
-    font-weight: normal;
+  color: #f44336; /* Red color for offline status */
+  font-size: 12px;
+  font-weight: normal;
 }
 .label-with-switch {
   display: flex;
@@ -524,7 +599,7 @@ onMounted(loadInitialSettings);
   right: 0;
   bottom: 0;
   background-color: #ccc;
-  transition: .4s;
+  transition: 0.4s;
 }
 
 .slider:before {
@@ -535,7 +610,7 @@ onMounted(loadInitialSettings);
   left: 4px;
   bottom: 4px;
   background-color: white;
-  transition: .4s;
+  transition: 0.4s;
 }
 
 input:checked + .slider {

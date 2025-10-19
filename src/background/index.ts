@@ -1,12 +1,12 @@
 /**
- * CookieSyncer - "Automatic & Non-Intrusive" Backend
+ * CookiePusher - "Automatic & Non-Intrusive" Backend
  */
 
 import CryptoJS from 'crypto-js';
 
 import { Cookie } from '../../types/extension';
 
-const LOGS_STORAGE_KEY = 'cookieSyncerLogs';
+const LOGS_STORAGE_KEY = 'CookiePusherLogs';
 const SYNC_LIST_STORAGE_KEY = 'syncList';
 const COOKIE_REMARKS_STORAGE_KEY = 'cookieRemarks';
 const STATS_STORAGE_KEY = 'keepAliveStats';
@@ -40,7 +40,7 @@ async function addLog(message: string, type: 'info' | 'success' | 'error' = 'inf
         type,
         timestamp: new Date().toISOString()
     };
-    console.log(`[CookieSyncer Log - ${type}]: ${message}`);
+    console.log(`[CookiePusher Log - ${type}]: ${message}`);
     try {
         const { [LOGS_STORAGE_KEY]: logs = [] } = await chrome.storage.local.get(LOGS_STORAGE_KEY);
         logs.unshift(logEntry);
@@ -119,7 +119,7 @@ async function handleGetCookiesForCurrentTab() {
         target: { tabId: currentTab.id, allFrames: true },
         func: () => document.domain,
     }).catch(error => {
-        console.warn(`[CookieSyncer] Scripting injection failed: ${error.message}`);
+        console.warn(`[CookiePusher] Scripting injection failed: ${error.message}`);
         return [{ result: new URL(currentTab.url!).hostname }];
     });
 

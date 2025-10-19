@@ -22,7 +22,7 @@ src/
 ├── background/      # 后台脚本
 │   └── index.ts     # Service Worker
 └── core/            # 核心逻辑
-    └── CookieSyncerApp.ts
+    └── CookiePusherApp.ts
 ```
 
 ## 🛠️ 开发环境设置
@@ -127,7 +127,7 @@ npm test
 npm run build:extension
 ```
 
-生成 `dist/cookiesyncer.zip` 文件，可用于发布到浏览器应用商店。
+生成 `dist/CookiePusher.zip` 文件，可用于发布到浏览器应用商店。
 
 ### 版本管理
 

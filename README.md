@@ -1,8 +1,8 @@
-# CookieSyncer - 通用 Cookie/TOKEN 推送助手
+# CookiePusher - 通用 Cookie/TOKEN 推送助手
 
 [![zh-CN](https://img.shields.io/badge/language-简体中文-blue.svg)](README.md)
 
-**CookieSyncer** 是一个为重度浏览器用户设计的**单向同步**工具，旨在解决在多个第三方程序或设备间手动同步登录状态的繁琐问题。
+**CookiePusher** 是一个为重度浏览器用户设计的**单向同步**工具，旨在解决在多个第三方程序或设备间手动同步登录状态的繁琐问题。
 
 它的核心理念是：让您在浏览器中活跃的登录状态（Cookie/Token）能够被实时、自动地推送到一个中心化的 API 服务，从而让您在其他任何需要该登录凭据的地方，都能获取到最新的、可用的 Cookie。
 
@@ -30,7 +30,7 @@
 
 ## 🏛️ 项目架构
 
-CookieSyncer 由两部分组成：一个浏览器插件（前端）和一个 API 服务（后端）。
+CookiePusher 由两部分组成：一个浏览器插件（前端）和一个 API 服务（后端）。
 
 ```mermaid
 graph TD
@@ -105,10 +105,16 @@ graph TD
 
 ### 3. 配置插件
 
-1.  点击浏览器工具栏中的 CookieSyncer 图标，打开 Popup 界面。
+1.  点击浏览器工具栏中的 CookiePusher 图标，打开 Popup 界面。
 2.  进入“设置”页面。
 3.  填写您在第一步中部署好的 **API 端点** 和 **Auth Token** (API Key)。
 4.  点击“测试连接”，如果成功，您就可以开始使用了！
+
+## ✨ 开源贡献
+
+这是一个开源项目，我们欢迎任何形式的贡献，无论是提交 Issue、发起 Pull Request，还是帮助改进文档。
+
+- **GitHub 地址**: [![GitHub](https://img.shields.io/badge/GitHub-black?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Drean21/CookiePusher)
 
 ## 📜 许可
 
