@@ -92,6 +92,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         getUserSettings: handleGetUserSettings,
         updateUserSettings: handleUpdateUserSettings,
         updateCookieRemark: handleUpdateCookieRemark,
+        clearDomainStats: handleClearDomainStats,
     };
 
     if (actionMap[action]) {
@@ -893,6 +894,33 @@ async function handleUpdateCookieRemark(payload: { cookieKey: string; remark: st
 
     addLog(`Cookie 备注已更新: ${cookieKey}`, 'info');
     return { success: true };
+}
+
+async function handleClearDomainStats(payload: { domain: string }) {
+    if (!payload || typeof payload.domain !== 'string') {
+        throw new Error('无效的域名以清除统计数据。');
+    }
+    const { domain } = payload;
+    const { [STATS_STORAGE_KEY]: stats = {} } = await chrome.storage.local.get(STATS_STORAGE_KEY);
+
+    let clearedCount = 0;
+    for (const key in stats) {
+        // Key format is "name|domain|path"
+        const keyDomain = key.split('|')[1];
+        if (getRegistrableDomain(keyDomain) === domain) {
+            delete stats[key];
+            clearedCount++;
+        }
+    }
+
+    if (clearedCount > 0) {
+        await chrome.storage.local.set({ [STATS_STORAGE_KEY]: stats });
+        addLog(`已清除域名 "${domain}" 下 ${clearedCount} 个Cookie的统计数据。`, 'success');
+    } else {
+        addLog(`在域名 "${domain}" 下未找到可清除的统计数据。`, 'info');
+    }
+
+    return { success: true, clearedCount };
 }
 
 
