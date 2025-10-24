@@ -4,7 +4,7 @@ import (
 	"cookie-syncer/api/internal/config"
 	"cookie-syncer/api/internal/handler"
 	"cookie-syncer/api/internal/router"
-	"cookie-syncer/api/internal/store/sqlitestore"
+	"cookie-syncer/api/internal/store/gormstore"
 	"net/http"
 	"os"
 
@@ -12,10 +12,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	_ "modernc.org/sqlite" // Import the pure Go SQLite driver
 )
-
-const dbFileName = "CookiePusher.db?_busy_timeout=5000"
 
 // @title           Cookie Syncer API
 // @version         1.0
@@ -45,17 +42,17 @@ func main() {
 	// Load application configuration
 	cfg := config.Load()
 
-	// Initialize a new SQLite store. The _busy_timeout parameter is crucial for handling concurrent requests.
-	db, err := sqlitestore.New(dbFileName, cfg.AdminKey, cfg.PoolAccessKey)
+	// Initialize a new GORM store based on configuration.
+	db, err := gormstore.New(cfg, cfg.AdminKey, cfg.PoolAccessKey)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize database")
 	}
-	log.Info().Msgf("Database initialized and connected at %s", dbFileName)
+	log.Info().Msgf("Database initialized and connected to %s database", cfg.DBType)
 
 	// Create a new router and pass the store to it.
 	lockManager := handler.NewUserLockManager()
 	mux := router.NewRouter(db, lockManager, cfg)
-	
+
 	// Print all registered routes
 	router.PrintRoutes(mux)
 
