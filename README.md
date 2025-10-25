@@ -1,4 +1,4 @@
-# CookiePusher - 通用 Cookie/TOKEN 推送助手
+# 🍪 CookiePusher - 通用 Cookie/TOKEN 推送助手
 
 [![zh-CN](https://img.shields.io/badge/language-简体中文-blue.svg)](README.md)
 
@@ -9,23 +9,23 @@
 ## ✨ 主要特性
 
 - **🤖 核心同步机制**:
-    - **🤫 静默保活**：通过后台定时任务，静默访问目标网站的 iframe，以模拟真实用户活跃，从而自动刷新即将过期的 Cookie，确保登录状态持久有效。
-    - **🚀 变更推送**：通过 `chrome.cookies.onChanged` API 监听 Cookie 的精确变化，并将更新后的 Cookie 推送到您的私有后端，实现近乎实时的同步。
+    - **🤫 静默保活**：通过后台定时任务，静默访问目标网站，模拟真实用户活跃，自动刷新即将过期的 Cookie，确保登录状态持久有效。
+    - **📡 变更推送**：通过 `chrome.cookies.onChanged` API 监听 Cookie 的精确变化，并将更新后的 Cookie 推送到您的私有后端，实现近乎实时的同步。
 
 - **🔧 便捷的 Cookie 管理**:
-    - 在插件的 Popup 界面中，您可以方便地查看、搜索当前页面的所有 Cookie。
-    - 支持一键复制 Cookie 值、添加备注，以及快速将任何 Cookie 加入到您的同步列表中。
+    - **🔍 轻松查看**：在插件的 Popup 界面中，方便地查看、搜索当前页面的所有 Cookie。
+    - **📝 快速操作**：支持一键复制 Cookie 值、添加备注，以及快速将任何 Cookie 加入到您的同步列表中。
 
-- **🌐 双后端与 Cookie 池**:
+- **🌐 灵活的后端支持**:
     - **🔐 双后端支持**：您可以选择部署在自己的服务器上（Go），或是使用 Cloudflare 提供的 Serverless 服务，灵活度高。
-    - **🌍 共享池**：API 服务端提供了一个简易的 Cookie 共享池功能，允许您将某些非敏感的 Cookie 共享给团队或社区，方便协作。
+    - **🌍 共享池 (可选)**：API 服务端提供了一个简易的 Cookie 共享池功能，允许您将某些非敏感的 Cookie 共享给团队或社区，方便协作。
 
 - **⚙️ 强大的辅助功能**:
     - **📊 状态统计**：内置统计面板，直观展示每个受控 Cookie 的保活成功率、续期历史和下一次续期时间。
     - **📦 数据备份/恢复**：支持一键导出/导入所有配置和同步列表，迁移设备无忧。
     - **🏃‍♂️ 后台持续运行**：只要您的浏览器开启了“后台运行”模式，即使关闭所有窗口，插件的定时保活任务依然会准时执行。
 
-## 总体架构
+## 🏗️ 总体架构
 
 ```mermaid
 graph TD
@@ -41,8 +41,8 @@ graph TD
     Welcome <--> |消息通信| ServiceWorker
     ServiceWorker <--> |通信| Offscreen
 
-    ServiceWorker <--> |HTTP API| GoAPI["Go API 服务<br/>(/api/*)"]
-    ServiceWorker <--> |HTTP API| CFAPI["Cloudflare Workers API<br/>(/cf/api/*)"]
+    ServiceWorker <--> |HTTP API| GoAPI["Go API 服务<br/>(自有服务器)"]
+    ServiceWorker <--> |HTTP API| CFAPI["Cloudflare Workers API<br/>(Serverless)"]
     GoAPI <--> |读写| RDBMS[("PostgreSQL / MySQL / SQLite")]
     CFAPI <--> |读写| D1[(D1 数据库)]
     
@@ -53,7 +53,7 @@ graph TD
     style ServiceWorker fill:#f96,stroke:#333,stroke-width:2px
     style GoAPI fill:#8f8,stroke:#333,stroke-width:2px
     style CFAPI fill:#8f8,stroke:#333,stroke-width:2px
-    style SQLite fill:#ff9,stroke:#333,stroke-width:2px
+    style RDBMS fill:#ff9,stroke:#333,stroke-width:2px
     style D1 fill:#ff9,stroke:#333,stroke-width:2px
     style TargetWebsite fill:#c96,stroke:#333,stroke-width:2px
 ```
@@ -64,7 +64,7 @@ graph TD
 
 ```mermaid
 graph LR
-    subgraph KeepAlive [定时保活流程]
+    subgraph KeepAlive [🔄 定时保活流程]
         KA1[定时器触发] --> KA2[创建 Cookie 快照]
         KA2 --> KA3[创建 Offscreen Document]
         KA3 --> KA4[注入 iframe 访问网站]
@@ -78,7 +78,7 @@ graph LR
         KA10 --> KA11[记录任务完成]
     end
 
-    subgraph ChangePush [变更推送流程]
+    subgraph ChangePush [📤 变更推送流程]
         CP1[变更来源] --> CP2[更新本地 Cookie 列表]
         CP2 --> CP3[启动 15 秒去抖定时器]
         CP3 --> CP4{有新变更?}
@@ -99,7 +99,7 @@ graph LR
         CP9 --> CP16
     end
 
-    subgraph Sources [变更来源]
+    subgraph Sources [📍 变更来源]
         S1[Cookie 变更事件]
         S2[保活任务检测]
         S3[用户手动操作]
@@ -109,7 +109,7 @@ graph LR
     KeepAlive -- "检测到变化时" --> CP1
 ```
 
-### 1. 静默保活 (Keep-Alive)
+### 1. ⏳ 静默保活 (Keep-Alive)
 
 这是确保 Cookie “永不过期”的关键。
 1.  **定时唤醒**：插件使用 `chrome.alarms` API 创建一个周期性定时器（用户可自定义频率）。
@@ -118,7 +118,7 @@ graph LR
 4.  **自动续期**：如果服务器配置正确，这次请求会像正常的用户访问一样，刷新（续期）相关的 Cookie，延长其有效期。
 5.  **记录结果**：访问完成后，Service Worker 会对比操作前后的 Cookie 快照，并将续期成功、失败或无变化的状态记录到统计面板中。
 
-### 2. 变更推送 (Change & Push)
+### 2. 📤 变更推送 (Change & Push)
 
 这是确保您的后端总能拿到最新 Cookie 的机制。
 1.  **监听变更**：插件使用 `chrome.cookies.onChanged` API，这是一个强大的事件监听器，可以捕获浏览器中每一个 Cookie 的增、删、改操作。
@@ -132,15 +132,15 @@ graph LR
 
 为了避免不必要的 API 调用和数据存储开销（尤其在使用 Cloudflare 部署时），请务必**按需、审慎地选择要同步的 Cookie**。
 
-- **只选择必要的 Cookie**: 将同步列表的范围限制在您真正在其他地方需要的 Cookie 上。
-- **避免高频变化的 Cookie**: 某些网站的 Cookie 可能是临时指纹或追踪ID（例如 Bilibili 的 `buvid4`），它们在每次页面加载时都可能变化。将这类 Cookie 加入同步列表，会导致插件进行大量不必要的推送，迅速消耗您的后端资源和免费额度。
+- **🎯 只选择必要的 Cookie**: 将同步列表的范围限制在您真正在其他地方需要的 Cookie 上。
+- **📈 避免高频变化的 Cookie**: 某些网站的 Cookie 可能是临时指纹或追踪ID（例如 Bilibili 的 `buvid4`），它们在每次页面加载时都可能变化。将这类 Cookie 加入同步列表，会导致插件进行大量不必要的推送，迅速消耗您的后端资源和免费额度。
 
-> **最佳实践**：在添加一个 Cookie 到同步列表前，先观察它在多次刷新页面后的变化情况。如果它频繁变化且对您的外部应用无用，请不要同步它。
+> **💡 最佳实践**：在添加一个 Cookie 到同步列表前，先观察它在多次刷新页面后的变化情况。如果它频繁变化且对您的外部应用无用，请不要同步它。
 
 
 ## 🚀 快速开始
 
-### 1. 部署后端服务
+### 1. ☁️ 部署后端服务
 
 您可以从以下两种方案中选择一种来部署后端 API：
 
@@ -159,9 +159,9 @@ graph LR
   
   **[➡️ 查看 Cloudflare Worker 部署指南](api_service/cf/README.md)**
 
-### 2. 构建并加载插件
+### 2. 🧩 构建并加载插件
 
-  **[➡️ 查看 插件 开发指南](DEVELOPMENT.md)**
+  **[➡️ 查看插件开发与调试指南](DEVELOPMENT.md)**
 
 1.  **安装依赖**:
     ```bash
@@ -178,12 +178,19 @@ graph LR
     - 启用“开发者模式”。
     - 点击“加载已解压的扩展程序”，选择上一步生成的 `dist` 目录。
 
-### 3. 配置插件
+### 3. 🔌 配置插件
 
 1.  点击浏览器工具栏中的 CookiePusher 图标，打开 Popup 界面。
 2.  进入“设置”页面。
 3.  填写您在第一步中部署好的 **API 端点** 和 **Auth Token** (API Key)。
 4.  点击“测试连接”，如果成功，您就可以开始使用了！
+
+
+## ✅ 待办 (TODO)
+
+- [ ] **增强令牌同步**：增加对 `LocalStorage` 和 `SessionStorage` 的监控与同步。
+- [ ] **智能频率调整**：根据 Cookie 有效期和变化历史，动态调整保活频率。
+- [ ] **用户活动感知**：仅在浏览器活跃时执行高频保活，降低后台资源消耗。
 
 ## ✨ 开源贡献
 
