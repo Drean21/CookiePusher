@@ -520,7 +520,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     }
 });
 
-const MIN_KEEPALIVE_FREQUENCY_MINUTES = 1;
+const MIN_KEEPALIVE_FREQUENCY_MINUTES = 3;
 
 async function setupAlarms() {
     const { syncSettings } = await chrome.storage.local.get('syncSettings');
