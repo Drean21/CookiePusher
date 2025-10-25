@@ -1,6 +1,6 @@
 {
   "name": "cookiepusher",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "跨站点、跨设备的 Cookie/TOKEN 推送助手",
   "type": "module",
   "scripts": {
