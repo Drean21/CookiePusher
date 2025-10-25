@@ -54,11 +54,23 @@ func New(cfg *config.Config, adminKey, poolKey string) (store.Store, error) {
 	}
 
 	// Configure GORM logger to use zerolog
+	var gormLogLevel logger.LogLevel
+	switch cfg.GormLogLevel {
+	case "info":
+		gormLogLevel = logger.Info
+	case "warn":
+		gormLogLevel = logger.Warn
+	case "error":
+		gormLogLevel = logger.Error
+	default:
+		gormLogLevel = logger.Silent
+	}
+
 	gormLogger := logger.New(
 		&log.Logger,
 		logger.Config{
 			SlowThreshold:             time.Second,
-			LogLevel:                  logger.Info, // Default to silent, change to Info for debugging
+			LogLevel:                  gormLogLevel,
 			IgnoreRecordNotFoundError: true,
 			Colorful:                  false,
 		},
@@ -79,9 +91,9 @@ func New(cfg *config.Config, adminKey, poolKey string) (store.Store, error) {
 		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
 	}
 	// Set max open connections
-	sqlDB.SetMaxOpenConns(100)
+	sqlDB.SetMaxOpenConns(cfg.DBMaxOpenConnections)
 	// Set max idle connections
-	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxIdleConns(cfg.DBMaxIdleConnections)
 
 	s := &GormStore{db: db, adminKey: adminKey, poolKey: poolKey}
 

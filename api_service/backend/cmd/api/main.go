@@ -5,6 +5,7 @@ import (
 	"cookie-syncer/api/internal/handler"
 	"cookie-syncer/api/internal/router"
 	"cookie-syncer/api/internal/store/gormstore"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -42,6 +43,14 @@ func main() {
 	// Load application configuration
 	cfg := config.Load()
 
+	// Set log level based on configuration
+	logLevel, err := zerolog.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		log.Warn().Msgf("Invalid log level '%s', defaulting to 'info'", cfg.LogLevel)
+		logLevel = zerolog.InfoLevel
+	}
+	zerolog.SetGlobalLevel(logLevel)
+
 	// Initialize a new GORM store based on configuration.
 	db, err := gormstore.New(cfg, cfg.AdminKey, cfg.PoolAccessKey)
 	if err != nil {
@@ -57,11 +66,12 @@ func main() {
 	router.PrintRoutes(mux)
 
 	// Dynamically set swagger host
-	docs.SwaggerInfo.Host = "localhost:8080"
+	docs.SwaggerInfo.Host = fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
 	log.Info().Msgf("Swagger UI is available at http://%s/swagger/index.html", docs.SwaggerInfo.Host)
 
-	log.Info().Msg("Starting API server on :8080")
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
+	log.Info().Msgf("Starting API server on %s", addr)
+	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal().Err(err).Msg("Could not start server")
 	}
 }

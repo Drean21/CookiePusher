@@ -74,6 +74,7 @@ tmp/
 *.sqlite
 *.sqlite3
 data/
+postgres_data/
 
 # Node modules (if any)
 node_modules/

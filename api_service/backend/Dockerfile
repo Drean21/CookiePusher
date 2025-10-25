@@ -22,7 +22,7 @@ RUN go install github.com/swaggo/swag/cmd/swag@latest && \
 # Build the application
 ARG TARGETOS
 ARG TARGETARCH
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-s -w -X main.version=${GITHUB_REF##*/}" \
     -a \
     -o cookiepusher \
@@ -46,7 +46,9 @@ RUN mkdir -p /root/data
 EXPOSE 8080
 
 # Environment variables
-ENV DB_PATH=/root/data/CookiePusher.db
+# Default to SQLite. For external DBs, these should be set in docker-compose.yml or `docker run -e`
+ENV DB_TYPE=sqlite
+ENV DSN=/root/data/CookiePusher.db
 ENV ADMIN_KEY=
 ENV POOL_ACCESS_KEY=
 ENV PORT=8080

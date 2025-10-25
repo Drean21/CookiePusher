@@ -43,7 +43,7 @@ graph TD
 
     ServiceWorker <--> |HTTP API| GoAPI["Go API 服务<br/>(/api/*)"]
     ServiceWorker <--> |HTTP API| CFAPI["Cloudflare Workers API<br/>(/cf/api/*)"]
-    GoAPI <--> |读写| SQLite[(SQLite 数据库)]
+    GoAPI <--> |读写| RDBMS[("PostgreSQL / MySQL / SQLite")]
     CFAPI <--> |读写| D1[(D1 数据库)]
     
     ServiceWorker <--> |读写 Cookie| TargetWebsite[目标网站]
@@ -148,51 +148,11 @@ graph LR
   如果您有自己的服务器或熟悉 Docker，推荐使用此方案。它更稳定，且没有免费额度的后顾之忧。
 
   #### Docker 部署 (最简单)
-  我们提供了支持 `linux/amd64` 和 `linux/arm64` 架构的 Docker 镜像，发布在 [GitHub Container Registry](https://github.com/Drean21/CookiePusher/pkgs/container/cookiepusher)。
+  我们强烈推荐使用 Docker Compose 进行部署。它提供了一个灵活的、生产级的启动方式。
+  
+  **详细部署指南请参考 Go 后端服务的 `README.md` 文件：**
 
-  **使用 Docker Compose:**
-  ```yaml
-  version: '3.8'
-  services:
-    cookiepusher-api:
-      image: ghcr.io/Drean21/CookiePusher:latest
-      container_name: cookiepusher-api
-      ports:
-        - "8080:8080"
-      environment:
-        - ADMIN_KEY=your-super-secret-admin-key
-        - POOL_ACCESS_KEY=your-pool-access-key
-        - DB_PATH=/root/data/CookiePusher.db
-      volumes:
-        - cookiepusher_data:/root/data
-      restart: unless-stopped
-      healthcheck:
-        test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
-        interval: 30s
-        timeout: 10s
-        retries: 3
-        start_period: 40s
-  volumes:
-    cookiepusher_data:
-  ```
-
-  **使用 Docker CLI:**
-  ```bash
-  # 创建数据目录
-  mkdir -p ./data
-
-  # 运行容器
-  docker run -d \
-    --name cookiepusher-api \
-    -p 8080:8080 \
-    -e ADMIN_KEY=your-super-secret-admin-key \
-    -e POOL_ACCESS_KEY=your-pool-access-key \
-    -v $(pwd)/data:/root/data \
-    --restart unless-stopped \
-    ghcr.io/Drean21/CookiePusher:latest
-  ```
-
-  **[➡️ 查看更详细的 Go 后端部署指南（包括手动编译）](api_service/backend/README.md)**
+  **[➡️ 查看详细的 Go 后端部署指南](api_service/backend/README.md)**
 
 - **方案 B: Cloudflare Worker 后端**
   如果您没有服务器，希望快速体验，可以选择此方案。
