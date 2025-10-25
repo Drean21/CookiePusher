@@ -22,8 +22,9 @@ type Config struct {
 	DBMaxIdleConnections int
 
 	// Server
-	Port string
-	Host string
+	Port         string
+	Host         string
+	SwaggerHost  string
 
 	// Logging
 	LogLevel     string
@@ -48,6 +49,7 @@ func Load() *Config {
 	flag.IntVar(&cfg.DBMaxIdleConnections, "db-max-idle-conns", getEnvAsInt("DB_MAX_IDLE_CONNECTIONS", 5), "Database max idle connections")
 	flag.StringVar(&cfg.Port, "port", getEnv("PORT", "8080"), "Server port")
 	flag.StringVar(&cfg.Host, "host", getEnv("HOST", "0.0.0.0"), "Server host")
+	flag.StringVar(&cfg.SwaggerHost, "swagger-host", getEnv("SWAGGER_HOST", ""), "Public host for Swagger UI, e.g., my-service.hf.space")
 	flag.StringVar(&cfg.LogLevel, "log-level", getEnv("LOG_LEVEL", "info"), "Log level (debug, info, warn, error)")
 	flag.StringVar(&cfg.GormLogLevel, "gorm-log-level", getEnv("GORM_LOG_LEVEL", "silent"), "GORM log level (silent, info, warn, error)")
 

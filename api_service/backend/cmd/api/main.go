@@ -65,9 +65,16 @@ func main() {
 	// Print all registered routes
 	router.PrintRoutes(mux)
 
-	// Dynamically set swagger host
-	docs.SwaggerInfo.Host = fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
-	log.Info().Msgf("Swagger UI is available at http://%s/swagger/index.html", docs.SwaggerInfo.Host)
+	// Dynamically set swagger host.
+	// Use SwaggerHost if provided, otherwise fall back to the server's host and port.
+	if cfg.SwaggerHost != "" {
+		docs.SwaggerInfo.Host = cfg.SwaggerHost
+		// When using a public host, we assume HTTPS is handled by a proxy.
+		log.Info().Msgf("Swagger UI is available at https://%s/swagger/index.html", docs.SwaggerInfo.Host)
+	} else {
+		docs.SwaggerInfo.Host = fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
+		log.Info().Msgf("Swagger UI is available at http://%s/swagger/index.html", docs.SwaggerInfo.Host)
+	}
 
 	addr := fmt.Sprintf("%s:%s", cfg.Host, cfg.Port)
 	log.Info().Msgf("Starting API server on %s", addr)
