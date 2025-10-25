@@ -176,7 +176,7 @@
 
 <script setup lang="ts">
 import CryptoJS from "crypto-js";
-import { computed, inject, onMounted, ref } from "vue";
+import { computed, inject, onMounted, ref, watch } from "vue";
 import { sendMessage } from "../../utils/message";
 import LogView from "./LogView.vue";
 
@@ -320,7 +320,7 @@ const importData = () => {
         if (response.success) {
           showNotification("数据导入成功！请重新加载插件。", "success");
           // Optionally, re-initialize the settings view after import
-          await loadInitialSettings();
+          await loadLocalSettings();
         } else {
           throw new Error(response.error);
         }
@@ -348,8 +348,8 @@ const updateSharingSettings = async () => {
   }
 };
 
-const loadInitialSettings = async () => {
-  // Load sync settings
+const loadLocalSettings = async () => {
+  // Load sync settings from local storage
   const { syncSettings: storedSettings } = await chrome.storage.local.get("syncSettings");
   if (storedSettings) {
     syncSettings.value.apiEndpoint = storedSettings.apiEndpoint || "";
@@ -367,8 +367,15 @@ const loadInitialSettings = async () => {
       }
     }
   }
+  
+  // Load cached sharing settings from local storage
+  const { sharingSettings } = await chrome.storage.local.get("sharingSettings");
+  if (sharingSettings && typeof sharingSettings.enabled === "boolean") {
+    sharingEnabled.value = sharingSettings.enabled;
+  }
+};
 
-  // Load sharing settings from the backend
+const loadSharingSettings = async () => {
   try {
     const response = await sendMessage("getUserSettings");
     if (response.success && typeof response.data.sharing_enabled === "boolean") {
@@ -381,16 +388,18 @@ const loadInitialSettings = async () => {
       throw new Error(response.error || "Invalid data from API");
     }
   } catch (e: any) {
-    console.warn("Could not fetch initial sharing settings from API:", e.message);
-    const { sharingSettings } = await chrome.storage.local.get("sharingSettings");
-    if (sharingSettings && typeof sharingSettings.enabled === "boolean") {
-      sharingEnabled.value = sharingSettings.enabled;
-    }
+    console.warn("Could not fetch sharing settings from API:", e.message);
     isOnline.value = false;
   }
 };
 
-onMounted(loadInitialSettings);
+watch(activeSubView, (newView) => {
+  if (newView === 'sharing') {
+    loadSharingSettings();
+  }
+});
+
+onMounted(loadLocalSettings);
 </script>
 
 <style scoped>

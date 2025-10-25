@@ -84,7 +84,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 throw new Error("Invalid syncList provided for update.");
             }
             await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: p.syncList });
-            await triggerFullSync();
+            scheduleSync(); // Use debounced sync
             return { success: true };
         },
         exportAllData: handleExportAllData,
@@ -199,7 +199,7 @@ async function handleSyncCookies(payload: { cookie?: Cookie, cookies?: Cookie[] 
     const updatedSyncList = Array.from(syncMap.values());
     await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedSyncList });
     
-    await triggerFullSync(); // Trigger sync after local update
+    scheduleSync(); // Use debounced sync
     
     const logMessage = `推送列表更新: 新增 ${addedCount}, 总计 ${updatedSyncList.length}`;
     addLog(logMessage, 'success');
@@ -219,7 +219,7 @@ async function handleRemoveCookieFromSync(payload: { cookie: Cookie }) {
     const updatedSyncList = currentSyncList.filter(c => getCookieKey(c) !== keyToRemove);
     
     await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedSyncList });
-    await triggerFullSync(); // Trigger sync after local update
+    scheduleSync(); // Use debounced sync
 
     const logMessage = `从推送列表移除: ${cookieToRemove.name}.`;
     addLog(logMessage, 'info');
@@ -233,7 +233,7 @@ async function handleRemoveDomainFromSync(payload: { domain: string }) {
     const updatedSyncList = currentSyncList.filter(c => getRegistrableDomain(c.domain) !== domainToRemove);
     
     await chrome.storage.local.set({ [SYNC_LIST_STORAGE_KEY]: updatedSyncList });
-    await triggerFullSync(); // Trigger sync after local update
+    scheduleSync(); // Use debounced sync
 
     const logMessage = `从推送列表移除域名: ${domainToRemove}.`;
     addLog(logMessage, 'info');
