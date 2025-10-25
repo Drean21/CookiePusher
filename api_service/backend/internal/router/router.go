@@ -33,6 +33,11 @@ func NewRouter(db store.Store, locker *handler.UserLockManager, cfg *config.Conf
 	})
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
+	// Root handler for health checks from platforms like Hugging Face
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		handler.RespondWithJSON(w, http.StatusOK, "Welcome to CookiePusher API. Service is healthy.", nil)
+	})
+
 	// Unauthenticated routes
 	r.Get("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
 		handler.RespondWithJSON(w, http.StatusOK, "Service is healthy", nil)
@@ -77,7 +82,7 @@ func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-		
+
 		defer func() {
 			log.Info().
 				Str("method", r.Method).
@@ -88,7 +93,7 @@ func Logger(next http.Handler) http.Handler {
 				Str("request_id", middleware.GetReqID(r.Context())).
 				Msg("Request handled")
 		}()
-		
+
 		next.ServeHTTP(ww, r)
 	})
 }
