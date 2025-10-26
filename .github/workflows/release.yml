@@ -1,4 +1,4 @@
-name: Release and Build
+name: Release Browser Extension
 
 on:
   push:
@@ -6,23 +6,17 @@ on:
       - "v*"
   workflow_dispatch:
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
-  build:
-    name: Build and Release
+  build-extension:
+    name: Build and Release Extension
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Build Browser Extension
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -41,169 +35,13 @@ jobs:
           zip -r ../cookiepusher-extension.zip .
           cd ..
 
-      # Build Backend API
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.21"
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('api_service/backend/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Download dependencies
-        working-directory: api_service/backend
-        run: go mod download
-
-      - name: Generate Swagger docs
-        working-directory: api_service/backend
-        run: |
-          go install github.com/swaggo/swag/cmd/swag@latest
-          swag init -g cmd/api/main.go -o docs
-
-      - name: Install UPX for compression
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y upx-ucl
-
-      - name: Build for multiple platforms
-        working-directory: api_service/backend
-        run: |
-          # Create release directory
-          mkdir -p release
-
-          # Build for Linux AMD64
-          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o release/cookiepusher-linux-amd64 ./cmd/api
-          upx --best release/cookiepusher-linux-amd64
-
-          # Build for Linux ARM64
-          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o release/cookiepusher-linux-arm64 ./cmd/api
-          upx --best release/cookiepusher-linux-arm64
-
-          # Build for Windows AMD64
-          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o release/cookiepusher-windows-amd64.exe ./cmd/api
-          upx --best release/cookiepusher-windows-amd64.exe
-
-          # Build for macOS AMD64
-          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o release/cookiepusher-darwin-amd64 ./cmd/api
-          # macOS binaries cannot be compressed with UPX on Linux
-
-          # Build for macOS ARM64 (Apple Silicon)
-          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o release/cookiepusher-darwin-arm64 ./cmd/api
-          # macOS binaries cannot be compressed with UPX on Linux
-
-          # Create tarballs
-          cd release
-          tar -czf cookiepusher-linux-amd64.tar.gz cookiepusher-linux-amd64
-          tar -czf cookiepusher-linux-arm64.tar.gz cookiepusher-linux-arm64
-          tar -czf cookiepusher-darwin-amd64.tar.gz cookiepusher-darwin-amd64
-          tar -czf cookiepusher-darwin-arm64.tar.gz cookiepusher-darwin-arm64
-          zip cookiepusher-windows-amd64.zip cookiepusher-windows-amd64.exe
-
-          # Generate checksums
-          sha256sum * > checksums.txt
-          cd ..
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker-container
-          driver-opts: |
-            image=moby/buildkit:buildx-stable-1
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=tag
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: api_service/backend
-          file: api_service/backend/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-        continue-on-error: false
-
-      - name: Build and push Docker image (fallback)
-        uses: docker/build-push-action@v5
-        if: failure()
-        with:
-          context: api_service/backend
-          file: api_service/backend/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Retry Docker Build with Alternative Registry
-        uses: docker/build-push-action@v5
-        if: failure()
-        with:
-          context: api_service/backend
-          file: api_service/backend/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
-          build-args: |
-            BUILDPLATFORM=linux/amd64
-          no-cache: true
-
       - name: Create or Update Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            api_service/backend/release/cookiepusher-linux-amd64.tar.gz
-            api_service/backend/release/cookiepusher-linux-arm64.tar.gz
-            api_service/backend/release/cookiepusher-darwin-amd64.tar.gz
-            api_service/backend/release/cookiepusher-darwin-arm64.tar.gz
-            api_service/backend/release/cookiepusher-windows-amd64.zip
-            api_service/backend/release/checksums.txt
             cookiepusher-extension.zip
           generate_release_notes: true
-          draft: false
-          prerelease: false
-          # 关键：如果Release已存在，会更新而不是失败
-          name: Release ${{ github.ref_name }}
+          name: Extension Release ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update Container Registry README
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          # Note: GitHub Container Registry doesn't support README updates via API
