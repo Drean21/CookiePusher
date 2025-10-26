@@ -1,0 +1,123 @@
+name: Release Backend API
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Backend version tag (e.g., api-v1.0.1)"
+        required: true
+        default: "api-v1.0.1"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-backend:
+    name: Build and Release Backend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('api_service/backend/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        working-directory: api_service/backend
+        run: go mod download
+
+      - name: Generate Swagger docs
+        working-directory: api_service/backend
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@latest
+          swag init -g cmd/api/main.go -o docs
+
+      - name: Install UPX for compression
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y upx-ucl
+
+      - name: Build for multiple platforms
+        working-directory: api_service/backend
+        run: |
+          mkdir -p release
+          GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o release/cookiepusher-linux-amd64 ./cmd/api
+          upx --best release/cookiepusher-linux-amd64
+          GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o release/cookiepusher-linux-arm64 ./cmd/api
+          upx --best release/cookiepusher-linux-arm64
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o release/cookiepusher-windows-amd64.exe ./cmd/api
+          upx --best release/cookiepusher-windows-amd64.exe
+          GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o release/cookiepusher-darwin-amd64 ./cmd/api
+          GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o release/cookiepusher-darwin-arm64 ./cmd/api
+          cd release
+          tar -czf cookiepusher-linux-amd64.tar.gz cookiepusher-linux-amd64
+          tar -czf cookiepusher-linux-arm64.tar.gz cookiepusher-linux-arm64
+          tar -czf cookiepusher-darwin-amd64.tar.gz cookiepusher-darwin-amd64
+          tar -czf cookiepusher-darwin-arm64.tar.gz cookiepusher-darwin-arm64
+          zip cookiepusher-windows-amd64.zip cookiepusher-windows-amd64.exe
+          sha256sum * > checksums.txt
+          cd ..
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend
+          tags: |
+            type=raw,value=${{ github.event.inputs.version }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: api_service/backend
+          file: api_service/backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            api_service/backend/release/cookiepusher-linux-amd64.tar.gz
+            api_service/backend/release/cookiepusher-linux-arm64.tar.gz
+            api_service/backend/release/cookiepusher-darwin-amd64.tar.gz
+            api_service/backend/release/cookiepusher-darwin-arm64.tar.gz
+            api_service/backend/release/cookiepusher-windows-amd64.zip
+            api_service/backend/release/checksums.txt
+          generate_release_notes: true
+          name: Backend Release ${{ github.event.inputs.version }}
+          tag_name: ${{ github.event.inputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
