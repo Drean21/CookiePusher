@@ -139,7 +139,7 @@ export const getDomainCookiesRoute = createRoute({
         query: z.object({
             format: z.enum(['json', 'header']).optional().openapi({
                 param: { name: 'format', in: 'query' },
-                description: 'json: returns an array of cookie objects. header: returns a single HTTP Cookie header string.',
+                description: 'json: returns a map of cookie objects, keyed by cookie name. header: returns a single HTTP Cookie header string.',
                 example: 'header',
             }),
         }),
@@ -259,7 +259,7 @@ export const getSharableCookiesRoute = createRoute({
         query: z.object({
             format: z.enum(['json', 'header']).optional().openapi({
                 param: { name: 'format', in: 'query' },
-                description: 'json: returns cookies grouped by user. header: returns an array of HTTP Cookie header strings, one per user.',
+                description: 'json: returns cookies as a nested map, grouped by user, domain, and cookie name. header: returns an array of HTTP Cookie header strings, one per user.',
                 example: 'header',
             }),
         }),

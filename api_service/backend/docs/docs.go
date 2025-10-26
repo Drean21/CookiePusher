@@ -520,7 +520,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "string"
+                                            "type": "object"
                                         }
                                     }
                                 }
@@ -663,10 +663,7 @@ const docTemplate = `{
                                                 "type": "object",
                                                 "properties": {
                                                     "cookies": {
-                                                        "type": "array",
-                                                        "items": {
-                                                            "$ref": "#/definitions/model.Cookie"
-                                                        }
+                                                        "type": "object"
                                                     },
                                                     "user_id": {
                                                         "type": "integer"

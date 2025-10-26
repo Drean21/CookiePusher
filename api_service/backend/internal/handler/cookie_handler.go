@@ -32,7 +32,7 @@ func GetAllCookiesHandler(db store.Store) http.HandlerFunc {
 			RespondWithError(w, http.StatusInternalServerError, "Could not fetch cookies")
 			return
 		}
-		
+
 		format := r.URL.Query().Get("format")
 		if format == "json" {
 			// Group cookies by domain -> { name: value }
@@ -69,7 +69,7 @@ func GetAllCookiesHandler(db store.Store) http.HandlerFunc {
 // @Produce      json
 // @Param        domain   path      string  true   "Domain"
 // @Param        format   query     string  false  "Output format"  Enums(json)
-// @Success      200      {object}  handler.APIResponse{data=string}
+// @Success      200      {object}  handler.APIResponse{data=object}
 // @Failure      401      {object}  handler.APIResponse
 // @Failure      500      {object}  handler.APIResponse
 // @Security     ApiKeyAuth
@@ -91,7 +91,12 @@ func GetDomainCookiesHandler(db store.Store) http.HandlerFunc {
 
 		format := r.URL.Query().Get("format")
 		if format == "json" {
-			RespondWithJSON(w, http.StatusOK, "Successfully retrieved cookies for domain", cookies)
+			// JSON format: { "cookie_name": "cookie_value" }
+			cookieMap := make(map[string]string)
+			for _, cookie := range cookies {
+				cookieMap[cookie.Name] = cookie.Value
+			}
+			RespondWithJSON(w, http.StatusOK, "Successfully retrieved cookies for domain", cookieMap)
 			return
 		}
 

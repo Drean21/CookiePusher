@@ -339,7 +339,7 @@ paths:
             - $ref: '#/definitions/handler.APIResponse'
             - properties:
                 data:
-                  type: string
+                  type: object
               type: object
         "401":
           description: Unauthorized
@@ -467,9 +467,7 @@ paths:
                   items:
                     properties:
                       cookies:
-                        items:
-                          $ref: '#/definitions/model.Cookie'
-                        type: array
+                        type: object
                       user_id:
                         type: integer
                     type: object

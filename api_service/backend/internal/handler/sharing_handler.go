@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"cookie-syncer/api/internal/model"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -85,7 +86,7 @@ func GetUserSettingsHandler(db store.Store) http.HandlerFunc {
 // @Param        domain   path      string  true   "The domain to fetch cookies for"
 // @Param        format   query     string  false  "Output format"  Enums(json)
 // @Success      200      {object}  handler.APIResponse{data=[]string} "Default response: Array of HTTP Cookie header strings"
-// @Success      200      {object}  handler.APIResponse{data=[]object{user_id=int,cookies=[]model.Cookie}} "JSON response with `?format=json`"
+// @Success      200      {object}  handler.APIResponse{data=[]object{user_id=int,cookies=object}} "JSON response with `?format=json`"
 // @Failure      401      {object}  handler.APIResponse "Unauthorized"
 // @Failure      500      {object}  handler.APIResponse "Internal Server Error"
 // @Security     PoolKeyAuth
@@ -114,16 +115,24 @@ func GetSharableCookiesHandler(db store.Store) http.HandlerFunc {
 
 		format := r.URL.Query().Get("format")
 		if format == "json" {
-			// JSON format: [{user_id: 1, cookies: [...]}, {user_id: 2, cookies: [...]}]
+			// JSON format: [{user_id: 1, cookies: {"domain": {"name": "value"}}}, ...]
 			type userCookies struct {
-				UserID  int64           `json:"user_id"`
-				Cookies []*model.Cookie `json:"cookies"`
+				UserID  int64                        `json:"user_id"`
+				Cookies map[string]map[string]string `json:"cookies"`
 			}
 			var result []userCookies
 			for _, userID := range sortedUserIDs {
+				domainMap := make(map[string]map[string]string)
+				for _, cookie := range cookiesByUser[userID] {
+					if _, ok := domainMap[cookie.Domain]; !ok {
+						domainMap[cookie.Domain] = make(map[string]string)
+					}
+					domainMap[cookie.Domain][cookie.Name] = cookie.Value
+				}
+
 				result = append(result, userCookies{
 					UserID:  userID,
-					Cookies: cookiesByUser[userID],
+					Cookies: domainMap,
 				})
 			}
 			RespondWithJSON(w, http.StatusOK, "Successfully retrieved sharable cookies", result)

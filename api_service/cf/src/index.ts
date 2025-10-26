@@ -1,7 +1,7 @@
 import { swaggerUI } from '@hono/swagger-ui';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { ZodError } from 'zod';
-import type { User } from './models';
+import type { Cookie, User } from './models';
 import { toApiUser } from './presenter';
 import { respond } from './response';
 import * as schema from './schema';
@@ -121,7 +121,14 @@ userApp.openapi(schema.getAllCookiesRoute, async (c) => {
     const { format } = c.req.valid('query');
     const cookies = await c.get('store').getAllCookies(c.get('user').id);
     if (format === 'json') {
-        return respond(c, 200, 'Successfully retrieved all cookies', cookies);
+        const domainMap: Record<string, Record<string, string>> = {};
+        for (const cookie of cookies) {
+            if (!domainMap[cookie.domain]) {
+                domainMap[cookie.domain] = {};
+            }
+            domainMap[cookie.domain][cookie.name] = cookie.value;
+        }
+        return respond(c, 200, 'Successfully retrieved all cookies', domainMap);
     }
     const groupedByDomain: Record<string, string> = {};
     for (const cookie of cookies) {
@@ -138,7 +145,11 @@ userApp.openapi(schema.getDomainCookiesRoute, async (c) => {
     const { format } = c.req.valid('query');
     const cookies = await c.get('store').getCookiesByDomain(c.get('user').id, domain);
     if (format === 'json') {
-        return respond(c, 200, `Successfully retrieved cookies for domain ${domain}`, cookies);
+        const cookieMap: Record<string, string> = {};
+        for (const cookie of cookies) {
+            cookieMap[cookie.name] = cookie.value;
+        }
+        return respond(c, 200, `Successfully retrieved cookies for domain ${domain}`, cookieMap);
     }
     const headerString = cookies.map(c => `${c.name}=${c.value}`).join('; ');
     return respond(c, 200, `Successfully retrieved cookies for domain ${domain} as header string`, headerString);
@@ -159,17 +170,34 @@ poolApp.openapi(schema.getSharableCookiesRoute, async (c) => {
     const { domain } = c.req.valid('param');
     const { format } = c.req.valid('query');
     const cookies = await c.get('store').getSharableCookiesByDomain(domain);
-    const cookiesByUser: Record<number, any[]> = {};
+    const cookiesByUser: Record<number, Cookie[]> = {};
     for (const cookie of cookies) {
         const userId = cookie.user_id as number;
-        if (!cookiesByUser[userId]) cookiesByUser[userId] = [];
+        if (!cookiesByUser[userId]) {
+            cookiesByUser[userId] = [];
+        }
         cookiesByUser[userId].push(cookie);
     }
+
     if (format === 'json') {
-        const result = Object.keys(cookiesByUser).map(userId => ({
-            user_id: parseInt(userId, 10),
-            cookies: cookiesByUser[parseInt(userId, 10)],
-        }));
+        const result = Object.keys(cookiesByUser).map(userIdStr => {
+            const userId = parseInt(userIdStr, 10);
+            const userCookies = cookiesByUser[userId];
+            const domainMap: Record<string, Record<string, string>> = {};
+
+            for (const cookie of userCookies) {
+                if (!domainMap[cookie.domain]) {
+                    domainMap[cookie.domain] = {};
+                }
+                domainMap[cookie.domain][cookie.name] = cookie.value;
+            }
+
+            return {
+                user_id: userId,
+                cookies: domainMap,
+            };
+        });
+
         return respond(c, 200, `Successfully retrieved sharable cookies for domain ${domain}`, result);
     }
     const result: string[] = [];
